@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Calculator</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#000000">
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#fff;--fg:#111;--key:#e6e6ea;--op:#ff9500;--opfg:#fff;--card:#f1f1f4;--accent:#2f6fed}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#000;--fg:#fff;--key:#333336;--card:#1c1c1e}}
+:root[data-theme="dark"]{--bg:#000;--fg:#fff;--key:#333336;--card:#1c1c1e}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+*{box-sizing:border-box}
+#calc{height:100%;display:flex;flex-direction:column;justify-content:flex-end;padding:12px;max-width:480px;margin:0 auto;direction:ltr}
+#disp{font-size:64px;text-align:right;padding:8px 12px;min-height:90px;overflow-x:auto;white-space:nowrap;font-weight:300}
+#hint{font-size:13px;opacity:.6;text-align:center;direction:rtl;padding:4px 8px}
+#keys{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+#keys button{height:72px;border:0;border-radius:36px;background:var(--key);color:var(--fg);font-size:28px}
+#keys button.op{background:var(--op);color:var(--opfg)}
+#keys button:active{filter:brightness(1.3)}
+#keys .z{grid-column:span 2;text-align:left;padding-left:30px}
+#vault{display:none;height:100%;overflow-y:auto;padding:14px;max-width:560px;margin:0 auto;direction:rtl}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+h1{font-size:22px;margin:0}
+.btn{border:0;border-radius:10px;padding:10px 16px;font-size:16px;background:var(--accent);color:#fff}
+.btn.g{background:var(--key);color:var(--fg)}
+textarea{width:100%;min-height:80px;border-radius:10px;border:1px solid var(--key);background:var(--card);color:var(--fg);padding:10px;font-size:16px;font-family:inherit}
+.row{display:flex;gap:8px;margin:8px 0 16px}
+.item{background:var(--card);border-radius:12px;padding:12px;margin-bottom:10px;white-space:pre-wrap;word-break:break-word}
+.item img{max-width:100%;border-radius:8px;display:block;margin-bottom:8px}
+.item button{margin-top:8px;font-size:14px;padding:6px 12px}
+#empty{opacity:.6;text-align:center;padding:30px}
+</style>
+</head>
+<body>
+<div id="calc">
+  <div id="hint"></div>
+  <div id="disp">0</div>
+  <div id="keys"></div>
+</div>
+
+<div id="vault">
+  <header><h1>الخزنة</h1><button class="btn g" id="lock">قفل 🔒</button></header>
+  <textarea id="note" placeholder="اكتب ملاحظة سرية..."></textarea>
+  <div class="row">
+    <button class="btn" id="saveNote">حفظ الملاحظة</button>
+    <button class="btn g" id="addFile">إضافة صورة</button>
+    <input type="file" id="file" accept="image/*" hidden>
+  </div>
+  <div id="list"></div>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+const enc=new TextEncoder(),dec=new TextDecoder();
+const b64=b=>btoa(String.fromCharCode(...new Uint8Array(b)));
+const ub64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+
+/* ---------- storage (encrypted blobs in IndexedDB) ---------- */
+const dbp=new Promise((res,rej)=>{const r=indexedDB.open('v',1);r.onupgradeneeded=()=>r.result.createObjectStore('i',{keyPath:'id'});r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
+async function tx(mode,fn){const d=await dbp;return new Promise((res,rej)=>{const t=d.transaction('i',mode);const q=fn(t.objectStore('i'));t.oncomplete=()=>res(q&&q.result);t.onerror=()=>rej(t.error)})}
+
+/* ---------- crypto (PBKDF2 -> AES-GCM) ---------- */
+async function derive(pin,salt){const k=await crypto.subtle.importKey('raw',enc.encode(pin),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:200000,hash:'SHA-256'},k,{name:'AES-GCM',length:256},false,['encrypt','decrypt'])}
+async function seal(key,buf){const iv=crypto.getRandomValues(new Uint8Array(12));const c=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,buf);return{iv,c}}
+const unseal=(key,iv,c)=>crypto.subtle.decrypt({name:'AES-GCM',iv},key,c);
+
+/* ---------- calculator ---------- */
+let expr='',key=null,decoy=false,urls=[];
+const disp=$('#disp'),hint=$('#hint');
+const layout=['AC','⌫','%','÷','7','8','9','×','4','5','6','−','1','2','3','+','0','.','='];
+const keys=$('#keys');
+layout.forEach(l=>{const b=document.createElement('button');b.textContent=l;if('÷×−+='.includes(l))b.className='op';if(l==='0')b.className='z';b.onclick=()=>press(l);keys.appendChild(b)});
+function show(){disp.textContent=expr||'0'}
+function setHint(){hint.textContent=localStorage.vault?'':'أول مرة: اكتب رقم سري (6 أرقام أو أكتر) واضغط ='}
+setHint();
+
+async function press(k){
+  if(k==='AC'){expr='';return show()}
+  if(k==='⌫'){expr=expr.slice(0,-1);return show()}
+  if(k==='='){return equals()}
+  expr+=({'÷':'/','×':'*','−':'-'}[k]||k);
+  show();
+}
+async function equals(){
+  if(/^\d{4,}$/.test(expr)){
+    const pin=expr;expr='';show();
+    if(!localStorage.vault){ // first time: create PIN
+      const salt=crypto.getRandomValues(new Uint8Array(16));
+      key=await derive(pin,salt);
+      const s=await seal(key,enc.encode('ok'));
+      localStorage.vault=JSON.stringify({s:b64(salt),iv:b64(s.iv),c:b64(s.c)});
+      decoy=false;setHint();return openVault();
+    }
+    const v=JSON.parse(localStorage.vault);
+    try{
+      const k=await derive(pin,ub64(v.s));
+      await unseal(k,ub64(v.iv),ub64(v.c));
+      key=k;decoy=false;
+    }catch(e){key=null;decoy=true} // wrong PIN -> empty fake vault
+    return openVault();
+  }
+  try{
+    if(!/^[\d+\-*/.%() ]+$/.test(expr)||!expr)throw 0;
+    const r=Function('"use strict";return ('+expr.replace(/(\d+(\.\d+)?)%/g,'($1/100)')+')')();
+    expr=String(+r.toFixed(10));if(!isFinite(r))expr='خطأ';
+  }catch(e){expr='خطأ'}
+  show();expr=(expr==='خطأ')?'':expr;
+}
+
+/* ---------- vault ---------- */
+function openVault(){$('#calc').style.display='none';$('#vault').style.display='block';render()}
+function lock(){
+  key=null;decoy=false;expr='';show();
+  urls.forEach(URL.revokeObjectURL);urls=[];
+  $('#list').innerHTML='';$('#note').value='';
+  $('#vault').style.display='none';$('#calc').style.display='flex';
+}
+$('#lock').onclick=lock;
+document.addEventListener('visibilitychange',()=>{if(document.hidden)lock()});
+
+async function render(){
+  const list=$('#list');list.innerHTML='';urls.forEach(URL.revokeObjectURL);urls=[];
+  const items=decoy?[]:((await tx('readonly',s=>s.getAll()))||[]).sort((a,b)=>b.id-a.id);
+  if(!items.length){list.innerHTML='<div id="empty">الخزنة فاضية</div>';return}
+  for(const it of items){
+    const d=document.createElement('div');d.className='item';
+    try{
+      const buf=await unseal(key,it.iv,it.c);
+      if(it.type==='note')d.textContent=dec.decode(buf);
+      else{const u=URL.createObjectURL(new Blob([buf],{type:it.mime}));urls.push(u);const im=new Image();im.src=u;d.appendChild(im)}
+    }catch(e){continue}
+    const del=document.createElement('button');del.className='btn g';del.textContent='حذف';
+    del.onclick=async()=>{if(confirm('تحذف العنصر ده؟')){await tx('readwrite',s=>s.delete(it.id));render()}};
+    d.appendChild(del);list.appendChild(d);
+  }
+}
+async function add(type,buf,mime){
+  if(decoy){return render()} // nothing is really saved in the fake vault
+  const s=await seal(key,buf);
+  await tx('readwrite',st=>st.put({id:Date.now(),type,mime,iv:s.iv,c:s.c}));
+  render();
+}
+$('#saveNote').onclick=async()=>{const t=$('#note').value.trim();if(!t)return;await add('note',enc.encode(t));$('#note').value=''};
+$('#addFile').onclick=()=>$('#file').click();
+$('#file').onchange=async e=>{const f=e.target.files[0];if(!f)return;await add('img',await f.arrayBuffer(),f.type);e.target.value=''};
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
