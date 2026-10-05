@@ -31,6 +31,8 @@ textarea{width:100%;min-height:80px;border-radius:10px;border:1px solid var(--ke
 .item{background:var(--card);border-radius:12px;padding:12px;margin-bottom:10px;white-space:pre-wrap;word-break:break-word}
 .item img{max-width:100%;border-radius:8px;display:block;margin-bottom:8px}
 .item button{margin-top:8px;font-size:14px;padding:6px 12px}
+details{background:var(--card);border-radius:12px;padding:10px 12px;margin-bottom:14px}summary{font-size:16px}details input{width:100%;margin:8px 0;padding:10px;border-radius:10px;border:1px solid var(--key);background:var(--bg);color:var(--fg);font-size:16px;font-family:inherit}#st,#rst{font-size:14px;margin-top:6px}
+#rec{display:none;height:100%;overflow-y:auto;padding:20px;max-width:480px;margin:0 auto;direction:rtl}#rec input{width:100%;margin:8px 0;padding:12px;border-radius:10px;border:1px solid var(--key);background:var(--card);color:var(--fg);font-size:16px;font-family:inherit}#rq{font-size:18px;margin:10px 0;padding:12px;background:var(--card);border-radius:10px}
 #empty{opacity:.6;text-align:center;padding:30px}
 </style>
 </head>
@@ -41,8 +43,23 @@ textarea{width:100%;min-height:80px;border-radius:10px;border:1px solid var(--ke
   <div id="keys"></div>
 </div>
 
+<div id="rec">
+  <h1>استرجاع الرقم السري</h1>
+  <div id="rq"></div>
+  <input id="ra" placeholder="إجابة السؤال">
+  <input id="rp" type="password" inputmode="numeric" placeholder="الرقم السري الجديد (6 أرقام أو أكتر)">
+  <div class="row"><button class="btn" id="rgo">تغيير الرقم</button><button class="btn g" id="rno">رجوع</button></div>
+  <div id="rst"></div>
+</div>
+
 <div id="vault">
   <header><h1>الخزنة</h1><button class="btn g" id="lock">قفل 🔒</button></header>
+  <details><summary>🆘 سؤال الطوارئ</summary>
+    <input id="qt" placeholder="السؤال (مثال: اسم أول مدرسة؟)">
+    <input id="qa" placeholder="الإجابة (الأفضل تكون طويلة)">
+    <button class="btn" id="qsave">حفظ السؤال</button>
+    <div id="st"></div>
+  </details>
   <textarea id="note" placeholder="اكتب ملاحظة سرية..."></textarea>
   <div class="row">
     <button class="btn" id="saveNote">حفظ الملاحظة</button>
@@ -62,10 +79,15 @@ const ub64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 const dbp=new Promise((res,rej)=>{const r=indexedDB.open('v',1);r.onupgradeneeded=()=>r.result.createObjectStore('i',{keyPath:'id'});r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
 async function tx(mode,fn){const d=await dbp;return new Promise((res,rej)=>{const t=d.transaction('i',mode);const q=fn(t.objectStore('i'));t.oncomplete=()=>res(q&&q.result);t.onerror=()=>rej(t.error)})}
 
-/* ---------- crypto (PBKDF2 -> AES-GCM) ---------- */
-async function derive(pin,salt){const k=await crypto.subtle.importKey('raw',enc.encode(pin),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:200000,hash:'SHA-256'},k,{name:'AES-GCM',length:256},false,['encrypt','decrypt'])}
+/* ---------- crypto: random master key, wrapped by PIN and by emergency answer ---------- */
+async function derive(txt,salt){const k=await crypto.subtle.importKey('raw',enc.encode(txt),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:200000,hash:'SHA-256'},k,{name:'AES-GCM',length:256},false,['encrypt','decrypt'])}
 async function seal(key,buf){const iv=crypto.getRandomValues(new Uint8Array(12));const c=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,buf);return{iv,c}}
 const unseal=(key,iv,c)=>crypto.subtle.decrypt({name:'AES-GCM',iv},key,c);
+const norm=t=>t.normalize('NFKC').toLowerCase().replace(/[\u064B-\u0652\u0640]/g,'').replace(/[أإآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/\s+/g,' ').trim();
+async function wrapWith(txt,master){const salt=crypto.getRandomValues(new Uint8Array(16));const wk=await derive(txt,salt);const raw=await crypto.subtle.exportKey('raw',master);const s=await seal(wk,raw);return{s:b64(salt),iv:b64(s.iv),c:b64(s.c)}}
+async function unwrapWith(txt,w){const wk=await derive(txt,ub64(w.s));const raw=await unseal(wk,ub64(w.iv),ub64(w.c));return crypto.subtle.importKey('raw',raw,'AES-GCM',true,['encrypt','decrypt'])}
+const getV=()=>JSON.parse(localStorage.vault2||'null');
+const setV=v=>localStorage.vault2=JSON.stringify(v);
 
 /* ---------- calculator ---------- */
 let expr='',key=null,decoy=false,urls=[];
@@ -74,7 +96,7 @@ const layout=['AC','⌫','%','÷','7','8','9','×','4','5','6','−','1','2','3'
 const keys=$('#keys');
 layout.forEach(l=>{const b=document.createElement('button');b.textContent=l;if('÷×−+='.includes(l))b.className='op';if(l==='0')b.className='z';b.onclick=()=>press(l);keys.appendChild(b)});
 function show(){disp.textContent=expr||'0'}
-function setHint(){hint.textContent=localStorage.vault?'':'أول مرة: اكتب رقم سري (6 أرقام أو أكتر) واضغط ='}
+function setHint(){hint.textContent=getV()?'':'أول مرة: اكتب رقم سري (6 أرقام أو أكتر) واضغط ='}
 setHint();
 
 async function press(k){
@@ -87,19 +109,14 @@ async function press(k){
 async function equals(){
   if(/^\d{4,}$/.test(expr)){
     const pin=expr;expr='';show();
-    if(!localStorage.vault){ // first time: create PIN
-      const salt=crypto.getRandomValues(new Uint8Array(16));
-      key=await derive(pin,salt);
-      const s=await seal(key,enc.encode('ok'));
-      localStorage.vault=JSON.stringify({s:b64(salt),iv:b64(s.iv),c:b64(s.c)});
+    const v=getV();
+    if(!v){ // first time: create master key + PIN
+      key=await crypto.subtle.generateKey({name:'AES-GCM',length:256},true,['encrypt','decrypt']);
+      setV({p:await wrapWith(pin,key),q:null});
       decoy=false;setHint();return openVault();
     }
-    const v=JSON.parse(localStorage.vault);
-    try{
-      const k=await derive(pin,ub64(v.s));
-      await unseal(k,ub64(v.iv),ub64(v.c));
-      key=k;decoy=false;
-    }catch(e){key=null;decoy=true} // wrong PIN -> empty fake vault
+    try{key=await unwrapWith(pin,v.p);decoy=false}
+    catch(e){key=null;decoy=true} // wrong PIN -> empty fake vault
     return openVault();
   }
   try{
@@ -110,15 +127,44 @@ async function equals(){
   show();expr=(expr==='خطأ')?'':expr;
 }
 
+/* ---------- emergency recovery: hold the number display for 2 seconds ---------- */
+let hold=null;
+disp.addEventListener('pointerdown',()=>{hold=setTimeout(openRec,2000)});
+['pointerup','pointerleave','pointercancel'].forEach(e=>disp.addEventListener(e,()=>clearTimeout(hold)));
+function openRec(){
+  const v=getV();$('#ra').value='';$('#rp').value='';$('#rst').textContent='';
+  $('#rq').textContent=(v&&v.q)?v.q.t:'لسه ما حددتش سؤال طوارئ.';
+  $('#calc').style.display='none';$('#rec').style.display='block';
+}
+$('#rno').onclick=()=>{$('#rec').style.display='none';$('#calc').style.display='flex'};
+$('#rgo').onclick=async()=>{
+  const v=getV(),st=$('#rst'),np=$('#rp').value.trim();
+  if(!v||!v.q){st.textContent='مفيش سؤال طوارئ متسجل.';return}
+  if(!/^\d{6,}$/.test(np)){st.textContent='الرقم الجديد لازم 6 أرقام أو أكتر.';return}
+  st.textContent='جاري التحقق...';
+  try{
+    const m=await unwrapWith(norm($('#ra').value),v.q);
+    v.p=await wrapWith(np,m);setV(v);
+    st.textContent='';$('#rec').style.display='none';
+    key=m;decoy=false;openVault();
+  }catch(e){st.textContent='الإجابة غلط.'}
+};
+
 /* ---------- vault ---------- */
 function openVault(){$('#calc').style.display='none';$('#vault').style.display='block';render()}
 function lock(){
-  key=null;decoy=false;expr='';show();
+  key=null;decoy=false;expr='';show();$('#st').textContent='';
   urls.forEach(URL.revokeObjectURL);urls=[];
   $('#list').innerHTML='';$('#note').value='';
   $('#vault').style.display='none';$('#calc').style.display='flex';
 }
 $('#lock').onclick=lock;
+$('#qsave').onclick=async()=>{
+  const t=$('#qt').value.trim(),an=norm($('#qa').value),st=$('#st');
+  if(!t||an.length<3){st.textContent='اكتب سؤال وإجابة (3 حروف على الأقل).';return}
+  if(!decoy){const v=getV();v.q={t,...await wrapWith(an,key)};setV(v)}
+  $('#qt').value='';$('#qa').value='';st.textContent='تم حفظ سؤال الطوارئ ✅';
+};
 document.addEventListener('visibilitychange',()=>{if(document.hidden)lock()});
 
 async function render(){
