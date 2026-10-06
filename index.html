@@ -82,6 +82,8 @@ details{background:var(--card);border-radius:12px;padding:10px 12px;margin-botto
 .card h3 .ic{width:20px;height:20px}
 .card p{margin:0 0 10px;font-size:13px;color:var(--mut);line-height:1.6}
 #st{font-size:14px;color:var(--gold);min-height:20px}
+#bst{font-size:14px;color:var(--gold);min-height:20px;margin-top:8px}
+#binfo{font-size:13px;color:var(--mut);line-height:1.9;margin-bottom:10px;white-space:pre-line}
 #vault .tb small{color:var(--mut)}
 #grid{gap:6px}
 .cell{border-radius:12px;border:1px solid rgba(255,255,255,.06)}
@@ -194,6 +196,14 @@ details{background:var(--card);border-radius:12px;padding:10px 12px;margin-botto
         <p>الأفضل 8 أرقام أو أكتر.</p>
         <input id="np1" type="password" inputmode="numeric" placeholder="الرقم الجديد">
         <button class="btn" id="pchg">تغيير الرقم السري</button>
+      </div>
+      <div class="card">
+        <h3><svg class="ic"><use href="#i-down"/></svg>نسخة احتياطية</h3>
+        <p>لو مسحت بيانات كروم أو اتشال التطبيق، كل اللي في الخزنة بيضيع. النسخة دي ملف واحد مشفّر، احفظه في مكان تاني (زي جوجل درايف) ومتسيبوش في التنزيلات.</p>
+        <div id="binfo"></div>
+        <div class="row" style="margin-bottom:0"><button class="btn" id="bexp">حفظ نسخة</button><button class="btn g" id="bimp">استرجاع نسخة</button></div>
+        <input type="file" id="bfile" hidden>
+        <div id="bst"></div>
       </div>
       <div id="st"></div>
     </div>
@@ -338,9 +348,9 @@ async function itemBlob(it,prog){
   return b;
 }
 
-function openVault(){$('#calc').style.display='none';$('#rec').style.display='none';$('#vault').style.display='flex';tabTo('p');load();bump()}
+function openVault(){if(!decoy&&navigator.storage&&navigator.storage.persist)navigator.storage.persist();$('#calc').style.display='none';$('#rec').style.display='none';$('#vault').style.display='flex';tabTo('p');load();bump()}
 function lock(){
-  key=null;decoy=false;expr='';show();$('#st').textContent='';clearTimeout(idle);$('#rec').style.display='none';
+  key=null;decoy=false;expr='';show();$('#st').textContent='';$('#bst').textContent='';clearTimeout(idle);$('#rec').style.display='none';
   closeViewer();urls.forEach(URL.revokeObjectURL);urls=[];thumbURL.clear();photos=[];notes=[];sel.clear();selMode=false;
   privKey=null;$('#grid').innerHTML='';$('#nlist').innerHTML='';$('#ilist').innerHTML='';$('#note').value='';
   $('#vault').style.display='none';$('#calc').style.display='flex';
@@ -366,6 +376,7 @@ function tabTo(t){
   ['p','n','i','s'].forEach(x=>{$('#'+x+'p').style.display=x===t?'block':'none';$('#t'+x).classList.toggle('on',x===t)});
   if(t!=='p'&&selMode){selMode=false;sel.clear();renderGrid()}
   if(t==='i')loadIntr();
+  if(t==='s'){$('#bst').textContent='';showBinfo()}
 }
 $('#tp').onclick=()=>tabTo('p');$('#tn').onclick=()=>tabTo('n');$('#ti').onclick=()=>tabTo('i');$('#ts').onclick=()=>tabTo('s');
 
@@ -627,6 +638,118 @@ $('#saveNote').onclick=async()=>{
   const t=$('#note').value.trim();if(!t)return;
   if(!decoy){const s=await seal(key,enc.encode(t));await tx('readwrite',st=>st.put({id:Date.now(),type:'note',iv:s.iv,c:s.c}))}
   $('#note').value='';load();
+};
+
+/* ----- backup: one encrypted file with everything ----- */
+const MAGIC='CVB1';
+function strip(o,bins){
+  if(o instanceof ArrayBuffer){bins.push(new Uint8Array(o));return{$b:bins.length-1,t:'a'}}
+  if(ArrayBuffer.isView(o)){bins.push(new Uint8Array(o.buffer,o.byteOffset,o.byteLength));return{$b:bins.length-1,t:'u'}}
+  if(Array.isArray(o))return o.map(x=>strip(x,bins));
+  if(o&&typeof o==='object'){const r={};for(const k in o)r[k]=strip(o[k],bins);return r}
+  return o;
+}
+function unstrip(o,bins){
+  if(Array.isArray(o))return o.map(x=>unstrip(x,bins));
+  if(o&&typeof o==='object'){
+    if('$b' in o){const b=bins[o.$b];return o.t==='a'?b:new Uint8Array(b)}
+    const r={};for(const k in o)r[k]=unstrip(o[k],bins);return r;
+  }
+  return o;
+}
+function rec(s,r){
+  const bins=[],h=enc.encode(JSON.stringify({s,r:strip(r,bins),l:bins.map(b=>b.byteLength)}));
+  const n=new Uint8Array(4);new DataView(n.buffer).setUint32(0,h.length);
+  return[n,h,...bins];
+}
+const dump=(st,cb)=>dbp.then(d=>new Promise((res,rej)=>{
+  const q=d.transaction(st).objectStore(st).openCursor();
+  q.onsuccess=()=>{const c=q.result;if(!c)return res();cb(c.value);c.continue()};
+  q.onerror=()=>rej(q.error);
+}));
+async function showBinfo(){
+  const b=$('#binfo'),lb=+localStorage.lb||0;
+  let s=(lb&&!decoy)?'آخر نسخة: '+new Date(lb).toLocaleDateString('ar-EG'):'⚠️ لسه ما عملتش نسخة احتياطية';
+  b.textContent=s;
+  if(decoy)return;
+  try{
+    if(navigator.storage&&navigator.storage.estimate){
+      const e=await navigator.storage.estimate();
+      s+='\nحجم الخزنة: '+Math.round((e.usage||0)/1048576)+' ميجا';
+      if(e.quota)s+=' · المتاح تقريبًا: '+Math.max(0,Math.round((e.quota-(e.usage||0))/1048576))+' ميجا';
+    }
+    if(navigator.storage&&navigator.storage.persisted)s+='\n'+((await navigator.storage.persisted())?'الحفظ محمي من المسح التلقائي ✅':'الحفظ مش مضمون ⚠️ (المتصفح ممكن يمسح لو المساحة قلّت)');
+  }catch(e){}
+  b.textContent=s;
+}
+$('#bexp').onclick=async()=>{
+  const st=$('#bst');
+  if(decoy){st.textContent='تم حفظ النسخة ✅';return}
+  picking=true;st.textContent='جاري تجهيز النسخة...';
+  try{
+    let blob=new Blob([enc.encode(MAGIC),...rec('m',{v:localStorage.vault2||''})]),n=0;
+    const add=s=>v=>{blob=new Blob([blob,...rec(s,v)]);n++;if(n%5===0)st.textContent='جاري تجهيز النسخة... '+n};
+    await dump('i',add('i'));await dump('c',add('c'));
+    const d=new Date(),p=x=>String(x).padStart(2,'0'),u=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=u;
+    a.download='calc-backup-'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'.bin';
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(u),180000);
+    localStorage.lb=String(Date.now());
+    st.textContent='تم حفظ النسخة في التنزيلات ✅ — انقلها لمكان تاني وامسحها من التنزيلات.';
+    showBinfo();
+  }catch(e){st.textContent='فشل حفظ النسخة (ممكن المساحة مش كفاية).'}
+  finally{setTimeout(()=>{picking=false},2500)}
+};
+$('#bimp').onclick=()=>{
+  if(decoy){$('#bst').textContent='الملف مش صالح.';return}
+  picking=true;$('#bfile').click();
+};
+$('#bfile').onchange=async e=>{
+  const f=e.target.files[0],st=$('#bst');e.target.value='';
+  if(!f||decoy){picking=false;return}
+  let wiped=false;
+  try{
+    st.textContent='جاري فحص الملف...';
+    const rd=async(a,b)=>new Uint8Array(await f.slice(a,b).arrayBuffer());
+    if(f.size<10||dec.decode(await rd(0,4))!==MAGIC)throw 1;
+    let pos=4,meta,recs=[];
+    while(pos<f.size){
+      if(pos+4>f.size)throw 1;
+      const hl=new DataView((await rd(pos,pos+4)).buffer).getUint32(0);
+      if(hl<2||hl>1e6||pos+4+hl>f.size)throw 1;
+      const h=JSON.parse(dec.decode(await rd(pos+4,pos+4+hl)));
+      const off=pos+4+hl;let tot=0;
+      if(!h||!Array.isArray(h.l))throw 1;
+      for(const x of h.l){if(!(x>=0))throw 1;tot+=x}
+      if(off+tot>f.size)throw 1;
+      if(h.s==='m'){meta=h.r&&h.r.v}
+      else if(h.s==='i'&&h.r&&h.r.id!=null)recs.push({h,off});
+      else if(h.s==='c'&&h.r&&typeof h.r.k==='string')recs.push({h,off});
+      else throw 1;
+      pos=off+tot;
+    }
+    if(typeof meta!=='string')throw 1;
+    const vv=JSON.parse(meta);if(!vv||!vv.p||!vv.p.c)throw 1;
+    const cnt=recs.filter(x=>x.h.s==='i').length;
+    if(!confirm('النسخة فيها '+cnt+' عنصر.\nكل اللي في الخزنة دلوقتي هيتمسح ويتبدّل بالنسخة، والرقم السري هيرجع للي كان وقت النسخة.\nتكمّل؟')){st.textContent='';picking=false;return}
+    const d=await dbp;wiped=true;
+    await new Promise((res,rej)=>{const t=d.transaction(['i','c'],'readwrite');t.objectStore('i').clear();t.objectStore('c').clear();t.oncomplete=res;t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error)});
+    let k=0;
+    for(const r of recs){
+      const bins=[];let o=r.off;
+      for(const x of r.h.l){bins.push(await f.slice(o,o+x).arrayBuffer());o+=x}
+      const val=unstrip(r.h.r,bins),sn=r.h.s;
+      await new Promise((res,rej)=>{const t=d.transaction(sn,'readwrite');t.objectStore(sn).put(val);t.oncomplete=res;t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error)});
+      k++;if(k%3===0||k===recs.length)st.textContent='جاري الاسترجاع... '+Math.round(k/recs.length*100)+'%';
+    }
+    localStorage.vault2=meta;okay('fa');okay('fr');picking=false;
+    lock();
+    hint.textContent='تم استرجاع النسخة ✅ افتح الخزنة بالرقم السري اللي كان وقت النسخة';
+  }catch(err){
+    st.textContent=wiped?'حصلت مشكلة أثناء الاسترجاع. متقفلش التطبيق وجرّب تاني بنفس الملف.':'الملف مش صالح، مش نسخة من الخزنة.';
+    picking=false;
+  }
 };
 
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
