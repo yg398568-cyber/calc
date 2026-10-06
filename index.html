@@ -13,14 +13,27 @@
 html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 *{box-sizing:border-box}
-#calc{height:100%;display:flex;flex-direction:column;justify-content:flex-end;padding:12px;max-width:480px;margin:0 auto;direction:ltr}
-#disp{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:manipulation;font-size:64px;text-align:right;padding:8px 12px;min-height:90px;overflow-x:auto;white-space:nowrap;font-weight:300}
-#hint{font-size:13px;opacity:.6;text-align:center;direction:rtl;padding:4px 8px}
-#keys{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-#keys button{height:72px;border:0;border-radius:36px;background:var(--key);color:var(--fg);font-size:28px}
-#keys button.op{background:var(--op);color:var(--opfg)}
-#keys button:active{filter:brightness(1.3)}
-#keys .z{grid-column:span 2;text-align:left;padding-left:30px}
+#calc{height:100%;display:flex;flex-direction:column;justify-content:flex-end;padding:14px 12px calc(14px + env(safe-area-inset-bottom,0px));max-width:480px;margin:0 auto;direction:ltr;background:var(--bg)}
+#calc::before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(70% 45% at 50% 100%,rgba(120,120,130,.06),transparent 70%)}
+#dispWrap{position:relative;width:100%;min-height:126px;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden}
+#disp{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:manipulation;font-size:clamp(42px,13vw,72px);line-height:1.05;text-align:right;padding:6px 10px 2px;min-height:82px;overflow-x:auto;white-space:nowrap;font-weight:300;letter-spacing:-1.5px;scrollbar-width:none}
+#disp::-webkit-scrollbar{display:none}
+#calcExpr{min-height:24px;padding:0 12px;color:var(--fg);opacity:.42;font-size:14px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#hint{font-size:12px;opacity:.5;text-align:center;direction:rtl;padding:3px 8px 8px;min-height:24px}
+#keys{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+#keys button{height:clamp(62px,17vw,76px);border:0;border-radius:50%;background:var(--key);color:var(--fg);font-size:clamp(23px,7vw,29px);font-weight:400;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 2px 5px rgba(0,0,0,.12);transition:transform .08s,filter .08s,background .08s}
+#keys button.op{background:var(--op);color:var(--opfg);font-weight:500}
+#keys button.fn{background:color-mix(in srgb,var(--key) 72%,#888 28%);font-size:clamp(19px,6vw,24px)}
+#keys button:active{transform:scale(.94);filter:brightness(1.18)}
+#keys button:focus-visible{outline:2px solid var(--op);outline-offset:2px}
+#keys .z{grid-column:span 2;border-radius:38px;text-align:left;padding-left:29px}
+@media(max-height:650px){
+  #calc{padding-top:6px}
+  #dispWrap{min-height:92px}
+  #disp{min-height:58px;font-size:clamp(34px,11vw,58px)}
+  #keys{gap:6px}
+  #keys button{height:58px}
+}
 #vault{display:none;height:100%;overflow-y:auto;padding:14px;max-width:560px;margin:0 auto;direction:rtl}
 header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
 h1{font-size:22px;margin:0}
@@ -145,8 +158,11 @@ details{background:var(--card);border-radius:12px;padding:10px 12px;margin-botto
 </head>
 <body>
 <div id="calc">
+  <div id="dispWrap">
+    <div id="calcExpr"></div>
+    <div id="disp">0</div>
+  </div>
   <div id="hint"></div>
-  <div id="disp">0</div>
   <div id="keys"></div>
 </div>
 
@@ -309,43 +325,265 @@ const setV=v=>localStorage.vault2=JSON.stringify(v);
 
 /* ---------- calculator ---------- */
 let expr='',key=null,decoy=false,urls=[];
-const disp=$('#disp'),hint=$('#hint');
+let justEvaluated=false,lastResult='';
+const disp=$('#disp'),hint=$('#hint'),calcExpr=$('#calcExpr');
+
 const layout=['AC','⌫','%','÷','7','8','9','×','4','5','6','−','1','2','3','+','0','.','='];
 const keys=$('#keys');
-layout.forEach(l=>{const b=document.createElement('button');b.textContent=l;if('÷×−+='.includes(l))b.className='op';if(l==='0')b.className='z';b.onclick=()=>press(l);keys.appendChild(b)});
-function show(){disp.textContent=expr||'0'}
-function setHint(){hint.textContent=getV()?'':'أول مرة: اكتب رقم سري (6 أرقام أو أكتر، والأفضل 8) واضغط ='}
+
+layout.forEach(l=>{
+  const b=document.createElement('button');
+  b.textContent=l;
+  if('÷×−+='.includes(l))b.className='op';
+  if(['AC','⌫','%'].includes(l))b.className='fn';
+  if(l==='0')b.classList.add('z');
+  b.setAttribute('aria-label',l);
+  b.onclick=()=>press(l);
+  keys.appendChild(b);
+});
+
+/* Display formatting is cosmetic only. The raw expression is kept separately,
+   which is important because a numeric-only expression can also be the vault PIN. */
+function formatNumber(n){
+  if(!Number.isFinite(n))return 'خطأ';
+  if(Object.is(n,-0))n=0;
+  let s=String(n);
+  if(/e/i.test(s)){
+    const [a,b]=s.split(/e/i);
+    return a.replace(/\.0+$/,'')+'e'+b;
+  }
+  if(s.includes('.')){
+    let [a,b]=s.split('.');
+    const sign=a.startsWith('-')?'-':'';
+    if(sign)a=a.slice(1);
+    a=a.replace(/\B(?=(\d{3})+(?!\d))/g,',');
+    return sign+a+'.'+b;
+  }
+  const sign=s.startsWith('-')?'-':'';
+  if(sign)s=s.slice(1);
+  return sign+s.replace(/\B(?=(\d{3})+(?!\d))/g,',');
+}
+
+function cleanExprForDisplay(s){
+  return s.replace(/\*/g,'×').replace(/\//g,'÷').replace(/-/g,'−');
+}
+
+function show(){
+  const raw=expr||'0';
+  if(raw==='خطأ'){
+    disp.textContent='خطأ';
+    calcExpr.textContent='';
+    return;
+  }
+  if(/^[0-9.]+$/.test(raw)){
+    disp.textContent=raw==='.'?'0.':formatNumber(raw);
+  }else{
+    const tail=raw.match(/(\d*\.?\d+|[\d.]+)$/);
+    disp.textContent=tail?formatNumber(tail[0]):cleanExprForDisplay(raw);
+  }
+  calcExpr.textContent=raw.length>0?cleanExprForDisplay(raw):'';
+  requestAnimationFrame(()=>{disp.scrollLeft=disp.scrollWidth});
+}
+
+function setHint(){
+  hint.textContent=getV()?'':'أول مرة: اكتب رقم سري (6 أرقام أو أكتر، والأفضل 8) واضغط =';
+}
 setHint();
 
-async function press(k){
-  if(k==='AC'){expr='';return show()}
-  if(k==='⌫'){expr=expr.slice(0,-1);return show()}
-  if(k==='='){return equals()}
-  expr+=({'÷':'/','×':'*','−':'-'}[k]||k);
+/* A small real calculator parser.
+   No eval/Function: operator precedence is handled explicitly:
+   multiplication/division before addition/subtraction, with percent as
+   percentage of the immediately preceding number. */
+function tokenize(s){
+  const out=[];
+  let i=0;
+  while(i<s.length){
+    const ch=s[i];
+    if(/\s/.test(ch)){i++;continue}
+    if(/[0-9.]/.test(ch)){
+      let j=i,dots=0;
+      while(j<s.length&&/[0-9.]/.test(s[j])){
+        if(s[j]==='.')dots++;
+        if(dots>1)throw Error('number');
+        j++;
+      }
+      const raw=s.slice(i,j);
+      if(raw==='.')throw Error('number');
+      out.push({t:'n',v:Number(raw)});
+      i=j;continue;
+    }
+    if('+-*/%'.includes(ch)){out.push({t:'o',v:ch});i++;continue}
+    throw Error('char');
+  }
+  return out;
+}
+
+function calculate(s){
+  const t=tokenize(s);
+  if(!t.length)throw Error('empty');
+
+  // Reject malformed operator sequences except a leading minus.
+  let prev=null;
+  for(let i=0;i<t.length;i++){
+    if(t[i].t==='o'){
+      if(t[i].v==='%' && (!prev||prev.t!=='n'))throw Error('percent');
+      if(t[i].v!=='%' && (!prev||prev.t!=='n') && !(i===0&&t[i].v==='-'))throw Error('op');
+    }else if(prev&&prev.t==='n'&&t[i].t==='n')throw Error('number');
+    prev=t[i];
+  }
+  if(t[t.length-1].t==='o'&&t[t.length-1].v!=='%')throw Error('end');
+
+  // Convert percent to decimal.  Example: 200+10% => 200+0.1.
+  for(let i=0;i<t.length;i++){
+    if(t[i].t==='o'&&t[i].v==='%'){
+      if(i===0||t[i-1].t!=='n')throw Error('percent');
+      t[i-1].v/=100;
+      t.splice(i,1);i--;
+    }
+  }
+
+  // Handle multiplication/division first.
+  const low=[];
+  let cur=null,op=null;
+  for(const x of t){
+    if(x.t==='n'){
+      if(cur===null)cur=x.v;
+      else{
+        if(op==='*')cur*=x.v;
+        else if(op==='/'){if(x.v===0)throw Error('zero');cur/=x.v}
+        else throw Error('op');
+        op=null;
+      }
+    }else{
+      if(x.v==='*'||x.v==='/'){
+        if(cur===null)throw Error('op');
+        op=x.v;
+      }else{
+        if(cur===null&&x.v==='-'){cur=0;low.push({v:0,op:'+'});}
+        else if(cur!==null){low.push({v:cur,op:x.v});cur=null}
+      }
+    }
+  }
+  if(cur===null)throw Error('end');
+  low.push({v:cur,op:'+'});
+
+  let result=0;
+  for(const x of low){
+    if(x.op==='+')result+=x.v;
+    else if(x.op==='-')result-=x.v;
+    else throw Error('op');
+  }
+  if(!Number.isFinite(result))throw Error('range');
+  return Number.parseFloat(result.toPrecision(12));
+}
+
+function currentNumber(){
+  const m=expr.match(/(\d*\.?\d+)$/);
+  return m?m[1]:'';
+}
+
+function appendDigit(d){
+  if(justEvaluated){expr='';justEvaluated=false;calcExpr.textContent=''}
+  const m=expr.match(/(\d*\.?\d+)$/);
+  if(m){
+    const n=m[1];
+    if(n==='0'&&d!=='0'&&!n.includes('.'))expr=expr.slice(0,-1)+d;
+    else if(n.length<18)expr+=d;
+  }else{
+    expr+=d;
+  }
   show();
 }
+
+function appendDot(){
+  if(justEvaluated){expr='';justEvaluated=false}
+  const n=currentNumber();
+  if(n.includes('.'))return;
+  expr+=n?' .'.replace(' ',''):'.';
+  show();
+}
+
+function appendOperator(op){
+  if(!expr||expr==='خطأ')return;
+  justEvaluated=false;
+  if(/[+\-*/]$/.test(expr)){
+    expr=expr.slice(0,-1)+op;
+  }else if(/%$/.test(expr)){
+    expr+=op;
+  }else{
+    expr+=op;
+  }
+  show();
+}
+
+async function press(k){
+  if(k==='AC'){
+    expr='';lastResult='';justEvaluated=false;calcExpr.textContent='';return show();
+  }
+  if(k==='⌫'){
+    justEvaluated=false;
+    expr=expr.slice(0,-1);
+    return show();
+  }
+  if(k==='='){
+    return equals();
+  }
+  if(k==='.'){
+    return appendDot();
+  }
+  if(/[0-9]/.test(k)){
+    return appendDigit(k);
+  }
+  if(k==='%'){
+    if(!expr||/[%+\-*/]$/.test(expr))return;
+    expr+='%';show();return;
+  }
+  appendOperator({'÷':'/','×':'*','−':'-','+':'+'}[k]||k);
+}
+
 async function equals(){
-  if(/^\d{4,}$/.test(expr)){
-    const pin=expr;expr='';show();
+  const raw=expr.trim();
+
+  // PIN mode remains exactly compatible with the existing vault.
+  if(/^\d{4,}$/.test(raw)){
+    const pin=raw;expr='';show();
     const v=getV();
-    if(!v){ // first time: create master key + PIN
+    if(!v){
       if(pin.length<6){hint.textContent='الرقم السري لازم 6 أرقام على الأقل';return}
       if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();
       key=await crypto.subtle.generateKey({name:'AES-GCM',length:256},true,['encrypt','decrypt']);
       setV({p:await wrapWith(pin,key),q:null});
       decoy=false;setHint();return openVault();
     }
-    if(isLocked('fa')){key=null;decoy=true;return openVault()} // too many wrong tries: fake vault, no check
-    try{key=await unwrapWith(pin,v.p);decoy=false;okay('fa');if(v.p.i!==IT){v.p=await wrapWith(pin,key);setV(v)}}
-    catch(e){failed('fa');if(THR('fa').n>=3)snap();key=null;decoy=true} // wrong PIN -> empty fake vault
+    if(isLocked('fa')){key=null;decoy=true;return openVault()}
+    try{
+      key=await unwrapWith(pin,v.p);decoy=false;okay('fa');
+      if(v.p.i!==IT){v.p=await wrapWith(pin,key);setV(v)}
+    }catch(e){
+      failed('fa');
+      if(THR('fa').n>=3)snap();
+      key=null;decoy=true;
+    }
     return openVault();
   }
+
+  if(!raw)return;
   try{
-    if(!/^[\d+\-*/.%() ]+$/.test(expr)||!expr)throw 0;
-    const r=Function('"use strict";return ('+expr.replace(/(\d+(\.\d+)?)%/g,'($1/100)')+')')();
-    expr=String(+r.toFixed(10));if(!isFinite(r))expr='خطأ';
-  }catch(e){expr='خطأ'}
-  show();expr=(expr==='خطأ')?'':expr;
+    const result=calculate(raw);
+    lastResult=String(result);
+    expr=String(result);
+    justEvaluated=true;
+    calcExpr.textContent=cleanExprForDisplay(raw)+' =';
+    show();
+    calcExpr.textContent=cleanExprForDisplay(raw)+' =';
+    disp.textContent=formatNumber(result);
+  }catch(e){
+    lastResult='';
+    expr='خطأ';
+    justEvaluated=true;
+    calcExpr.textContent=cleanExprForDisplay(raw);
+    show();
+  }
 }
 
 /* ---------- emergency recovery: hold the number display for 2 seconds ---------- */
