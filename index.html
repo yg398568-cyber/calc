@@ -124,7 +124,14 @@ details{background:var(--card);border-radius:12px;padding:10px 12px;margin-botto
 .dl .ic{width:30px;height:30px;color:var(--gold)}.dl small{color:var(--gold);font-weight:700}.dl b{font-weight:400;word-break:break-all}
 #vault[data-th=blue],#viewer[data-th=blue]{--gold:#5db3ff;--accent:#5db3ff;--orange:#9ad0ff;--g1:#7cc4ff;--g2:#2a7fd1}
 #vault[data-th=rose],#viewer[data-th=rose]{--gold:#ff7ac8;--accent:#ff7ac8;--orange:#ffa8dc;--g1:#ff9ad6;--g2:#d6409a}
-#vbot{flex-wrap:wrap;justify-content:center}
+#vbot{justify-content:center;gap:14px;padding-bottom:16px}
+#vbot .vbtn{width:50px;height:50px;padding:0;justify-content:center;border-radius:50%;font-size:21px}#vbot .vbtn .ic{width:22px;height:22px}
+#bar{justify-content:space-between;gap:6px}#bcount{flex-basis:100%;font-size:13px;color:var(--mut);font-weight:400}
+.ib{width:44px;height:44px;border:1px solid var(--key);background:var(--card);color:var(--fg);border-radius:14px;display:flex;align-items:center;justify-content:center;padding:0}
+.ib .ic{width:22px;height:22px}.ib.d{color:#ff8d93;border-color:rgba(201,50,58,.5)}
+.chip{padding:5px 11px;font-size:12px}.chips{margin-bottom:10px}
+#fgrid{gap:12px;margin-bottom:10px}.ftile{min-height:92px}
+.ftile.new{grid-column:1/-1;min-height:50px;flex-direction:row;gap:8px}.ftile.new b{font-size:14px}.ftile.new .ic{width:22px;height:22px}
 #vault[data-th=crimson],#viewer[data-th=crimson]{--gold:#ff6b73;--accent:#ff6b73;--orange:#ff9aa0;--g1:#ff7a80;--g2:#c9323a}
 #vault[data-th=green],#viewer[data-th=green]{--gold:#3fbf8f;--accent:#3fbf8f;--orange:#7be0b6;--g1:#5fe0b0;--g2:#1f8f66}
 #vault[data-th=violet],#viewer[data-th=violet]{--gold:#b48cff;--accent:#b48cff;--orange:#d0b4ff;--g1:#c8a8ff;--g2:#7a4fd6}
@@ -197,6 +204,13 @@ details{background:var(--card);border-radius:12px;padding:10px 12px;margin-botto
 <symbol id="i-back" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
 <symbol id="i-undo" viewBox="0 0 24 24"><path d="M3 12a9 9 0 109-9M3 4v5h5"/></symbol>
 <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></symbol>
+<symbol id="e-onepiece" viewBox="0 0 24 24"><ellipse cx="12" cy="15" rx="10" ry="3.5"/><path d="M6 14C6 8 8.5 5 12 5s6 3 6 9"/><path d="M6.4 12c3.5 1.2 7.7 1.2 11.2 0"/></symbol>
+<symbol id="e-jjk" viewBox="0 0 24 24"><path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3"/></symbol>
+<symbol id="e-hxh" viewBox="0 0 24 24"><path d="M12 2l8 10-8 10-8-10z"/><path d="M12 7l4 5-4 5-4-5z"/></symbol>
+<symbol id="e-death" viewBox="0 0 24 24"><path d="M12 8c-3-3-8-1-7 4 1 5 4 8 7 8s6-3 7-8c1-5-4-7-7-4z"/><path d="M12 8c0-2 1-4 3-5"/></symbol>
+<symbol id="e-db" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7l1.2 3.2 3.3.2-2.6 2.1.9 3.2-2.8-1.8-2.8 1.8.9-3.2-2.6-2.1 3.3-.2z"/></symbol>
+<symbol id="e-demon" viewBox="0 0 24 24"><path d="M2 7c3-4 6 4 10 0s7 4 10 0M2 12c3-4 6 4 10 0s7 4 10 0M2 17c3-4 6 4 10 0s7 4 10 0"/></symbol>
+<symbol id="e-aot" viewBox="0 0 24 24"><path d="M12 21V8M12 8C9 4 5 4 2 6c3 0 5 2 6 5M12 8c3-4 7-4 10-2-3 0-5 2-6 5"/></symbol>
 <symbol id="i-spiral" viewBox="0 0 24 24"><path d="M12 12c.8 0 1.2-.6 1.2-1.2S12.6 9.6 11.6 9.6 9.4 10.7 9.4 12.2 11 15 13.2 15 17 13 17 10.4 14.4 5.6 11 5.6 5 9 5 13 8.5 19.6 13.5 19.6 20 15 20 10"/></symbol>
 </defs></svg>
 
@@ -222,13 +236,13 @@ details{background:var(--card);border-radius:12px;padding:10px 12px;margin-botto
       <div id="pst"></div>
       <div id="grid"></div>
       <div id="bar">
-        <b id="bcount">0 محددة</b>
-        <button class="btn g" id="selAll">الكل</button>
-        <button class="btn g" id="bFav"><svg class="ic"><use href="#i-star"/></svg>مفضلة</button>
-        <button class="btn g" id="bMove"><svg class="ic"><use href="#i-folder"/></svg>نقل</button>
-        <button class="btn g" id="bUndo" style="display:none"><svg class="ic"><use href="#i-undo"/></svg>استعادة</button>
-        <button class="btn" id="bRestore"><svg class="ic"><use href="#i-down"/></svg>استرجاع</button>
-        <button class="btn d" id="bDel"><svg class="ic"><use href="#i-trash"/></svg><span id="bDelT">حذف</span></button>
+        <b id="bcount">0</b>
+        <button class="ib" id="selAll" aria-label="الكل"><svg class="ic"><use href="#i-select"/></svg></button>
+        <button class="ib" id="bFav" aria-label="مفضلة"><svg class="ic"><use href="#i-star"/></svg></button>
+        <button class="ib" id="bMove" aria-label="نقل"><svg class="ic"><use href="#i-folder"/></svg></button>
+        <button class="ib" id="bUndo" aria-label="استعادة" style="display:none"><svg class="ic"><use href="#i-undo"/></svg></button>
+        <button class="ib" id="bRestore" aria-label="استرجاع"><svg class="ic"><use href="#i-down"/></svg></button>
+        <button class="ib d" id="bDel" aria-label="حذف"><svg class="ic"><use href="#i-trash"/></svg><span id="bDelT" style="display:none">حذف</span></button>
       </div>
       <button id="addFile" aria-label="إضافة صور وفيديوهات"><svg class="ic" style="width:28px;height:28px;stroke-width:2.4"><use href="#i-plus"/></svg></button>
     </div>
@@ -265,7 +279,7 @@ details{background:var(--card);border-radius:12px;padding:10px 12px;margin-botto
         <input id="np1" type="password" inputmode="numeric" placeholder="الرقم الجديد">
         <button class="btn" id="pchg">تغيير الرقم السري</button>
       </div>
-      <div class="card"><h3><svg class="ic"><use href="#i-lock"/></svg>قفل سريع بالهزّة</h3><p>هزّ الموبايل هزّتين بسرعة وإنت في الخزنة، يرجّعك للآلة فورًا.</p><button class="btn g" id="skb"></button></div>
+      <div class="card"><h3><svg class="ic"><use href="#i-lock"/></svg>قفل سريع بالهزّة</h3><p>هزّة خفيفة ومتكررة مرتين وإنت في الخزنة، ترجّعك للآلة فورًا.</p><button class="btn g" id="skb"></button></div>
       <div class="card"><h3><svg class="ic"><use href="#i-spiral"/></svg>الثيم</h3><div class="row" id="throw" style="margin-bottom:0;flex-wrap:wrap"></div></div>
       <div class="card">
         <h3><svg class="ic"><use href="#i-down"/></svg>نسخة احتياطية</h3>
@@ -290,7 +304,7 @@ details{background:var(--card);border-radius:12px;padding:10px 12px;margin-botto
 <div id="viewer">
   <div id="vtop"><button class="vbtn" id="vclose"><svg class="ic"><use href="#i-x"/></svg>إغلاق</button><span id="vcount"></span></div>
   <div id="vmid"><img id="vimg" alt=""><video id="vvid" controls playsinline controlslist="nodownload"></video><button class="nav" id="vprev">‹</button><button class="nav" id="vnext">›</button></div>
-  <div id="vbot"><button class="vbtn" id="vname">✎ تسمية</button><button class="vbtn" id="vfav">☆</button><button class="vbtn" id="vplay">▶ عرض</button><button class="vbtn" id="vrestore"><svg class="ic"><use href="#i-down"/></svg>استرجاع للموبايل</button><button class="vbtn d" id="vdel"><svg class="ic"><use href="#i-trash"/></svg>حذف</button></div>
+  <div id="vbot"><button class="vbtn" id="vname" aria-label="تسمية">✎</button><button class="vbtn" id="vfav">☆</button><button class="vbtn" id="vplay" aria-label="عرض">▶</button><button class="vbtn" id="vrestore" aria-label="استرجاع"><svg class="ic"><use href="#i-down"/></svg></button><button class="vbtn d" id="vdel" aria-label="حذف"><svg class="ic"><use href="#i-trash"/></svg></button></div>
 </div>
 
 <script>
@@ -522,7 +536,7 @@ $('#rgo').onclick=async()=>{
 };
 
 /* ---------- vault ---------- */
-let editId=null,nq='',flt='all',asc=false,ntr=false,folders=[],cur=null,q='',view=[],photos=[],notes=[],selMode=false,sel=new Set(),vi=-1,picking=false,vurl=null,vtok=0;
+let tgt=null,editId=null,nq='',flt='all',asc=false,ntr=false,folders=[],cur=null,q='',view=[],photos=[],notes=[],selMode=false,sel=new Set(),vi=-1,picking=false,vurl=null,vtok=0;
 const thumbURL=new Map();
 let idle=null;
 const bump=()=>{clearTimeout(idle);if($('#vault').style.display==='flex')idle=setTimeout(()=>{if(picking||!$('#vvid').paused)bump();else lock()},90000)};
@@ -587,6 +601,12 @@ async function load(){
   for(const it of photos)if(it.nm){try{it.name=dec.decode(await unseal(key,it.nm.iv,it.nm.c))}catch(e){}}
   const old=photos.filter(p=>p.tr&&Date.now()-p.tr>2592e6).map(p=>p.id);
   if(old.length){await delIds(old);photos=photos.filter(p=>!old.includes(p.id))}
+  const orph=photos.filter(p=>!p.tr&&(!p.f||!folders.some(x=>x.id===p.f)));
+  if(orph.length&&!decoy){
+    let g=folders.find(x=>x.n==='عام');
+    if(!g){g={id:Date.now(),n:'عام',col:0};folders.push(g);await saveFolders()}
+    await patch(orph.map(p=>p.id),r=>{r.f=g.id});orph.forEach(p=>{p.f=g.id});
+  }
   for(const it of all.filter(i=>i.type==='note')){try{notes.push({id:it.id,tr:it.tr,text:dec.decode(await unseal(key,it.iv,it.c))})}catch(e){}}
   const on=notes.filter(n=>n.tr&&Date.now()-n.tr>2592e6).map(n=>n.id);
   if(on.length){await delIds(on);notes=notes.filter(n=>!on.includes(n.id))}
@@ -609,8 +629,8 @@ async function newFolder(ret){
   const f={id:Date.now(),n:n.slice(0,30),col:folders.length%4};folders.push(f);await saveFolders();if(!ret)renderGrid();return f.id;
 }
 async function delFolder(){
-  if(!confirm('تمسح المجلد؟ الملفات اللي جواه هترجع للمعرض الرئيسي.'))return;
-  await patch(photos.filter(p=>p.f===cur).map(p=>p.id),r=>{delete r.f});
+  if(!confirm('تمسح المجلد؟ كل الملفات اللي جواه هتروح لسلة المحذوفات.'))return;
+  await patch(photos.filter(p=>p.f===cur&&!p.tr).map(p=>p.id),r=>{r.tr=Date.now()});
   folders=folders.filter(f=>f.id!==cur);await saveFolders();cur=null;await load();
 }
 async function emptyTrash(){
@@ -623,10 +643,51 @@ $('#q').oninput=e=>{q=e.target.value.trim().toLowerCase();renderGrid()};
   b.onclick=()=>{if(k==='asc'){asc=!asc;b.textContent=asc?'↑ الأقدم':'↓ الأحدث'}else{flt=k;$('#chips').querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c.dataset.k===flt))}renderGrid()};
   $('#chips').appendChild(b);
 });
-const applyTh=()=>document.querySelectorAll('#vault,#viewer').forEach(e=>e.dataset.th=localStorage.th||'');
+/* anime themes: [name,title,gold,orange,g1,g2,background,font,radius,stroke,fill,cols,folderCols,nav,letterSp,fontStyle,fab,emblem] */
+const HEX='polygon(25% 5%,75% 5%,100% 50%,75% 95%,25% 95%,0 50%)',DIA='polygon(50% 0,100% 50%,50% 100%,0 50%)',SQ='inset(0 round 14px)';
+const TH={
+ naruto:['ناروتو','خزنة الهوكاجي','#ff9a2e','#ffb454','#ffb347','#e8590c','radial-gradient(120% 55% at 100% 0%,rgba(255,122,0,.3),transparent 60%),radial-gradient(90% 45% at 0% 100%,rgba(20,20,70,.6),transparent 60%),repeating-conic-gradient(from 0deg at 85% 6%,rgba(255,122,0,.06) 0 6deg,transparent 6deg 12deg)','system-ui,sans-serif','8px',2.6,'none',3,2,'b','.6px','italic','circle(50%)','i-spiral'],
+ onepiece:['ون بيس','كنز القراصنة','#ffd34d','#ffe38a','#ffe066','#e0a21a','linear-gradient(180deg,rgba(30,120,210,.3),transparent 45%),repeating-linear-gradient(0deg,rgba(255,255,255,.04) 0 2px,transparent 2px 22px),linear-gradient(0deg,rgba(214,170,90,.2),transparent 25%)','Georgia,serif','22px',2,'rgba(255,211,77,.12)',2,1,'t','0','normal','circle(50%)','e-onepiece'],
+ jjk:['جوجوتسو كايزن','طاقة اللعنة','#8f7bff','#b7a9ff','#a495ff','#5b3fe0','radial-gradient(80% 50% at 50% 0%,rgba(90,60,220,.4),transparent 70%),radial-gradient(60% 40% at 50% 100%,rgba(30,200,255,.18),transparent 70%),repeating-linear-gradient(115deg,rgba(255,255,255,.035) 0 1px,transparent 1px 14px)','ui-monospace,monospace','2px',1.5,'none',4,2,'b','1px','normal',DIA,'e-jjk'],
+ hxh:['هنتر × هنتر','رخصة الهنتر','#3fbf8f','#8fe8c4','#5fe0b0','#1f8f66','radial-gradient(100% 50% at 0% 0%,rgba(63,191,143,.28),transparent 60%),repeating-linear-gradient(45deg,rgba(232,200,74,.05) 0 2px,transparent 2px 24px),repeating-linear-gradient(-45deg,rgba(232,200,74,.05) 0 2px,transparent 2px 24px)','system-ui,sans-serif','0',2.2,'rgba(63,191,143,.1)',3,2,'t','.3px','normal',DIA,'e-hxh'],
+ death:['ديث نوت','دفتر الموت','#e0283c','#ff6b7a','#f0505f','#8f0f1f','radial-gradient(70% 40% at 50% 0%,rgba(190,20,40,.32),transparent 70%),repeating-linear-gradient(90deg,rgba(255,255,255,.03) 0 1px,transparent 1px 38px)','Georgia,serif','2px',1.4,'none',3,1,'b','1.5px','normal',SQ,'e-death'],
+ db:['دراغون بول','كرات التنين','#ffb300','#ffd54d','#ffc933','#ee6a00','radial-gradient(circle at 15% 12%,rgba(255,200,0,.3),transparent 35%),radial-gradient(circle at 90% 80%,rgba(255,90,0,.25),transparent 40%),radial-gradient(rgba(255,200,0,.12) 2px,transparent 3px) 0 0/34px 34px','system-ui,sans-serif','16px',2.8,'rgba(255,179,0,.14)',3,2,'b','0','italic','circle(50%)','e-db'],
+ demon:['ديمون سلاير','سيف التنفّس','#2fd3a0','#7be8c6','#4fe0b4','#168a68','conic-gradient(rgba(47,211,160,.1) 25%,transparent 0 50%,rgba(47,211,160,.1) 0 75%,transparent 0) 0 0/44px 44px,radial-gradient(80% 40% at 100% 0%,rgba(255,60,90,.28),transparent 60%)','system-ui,sans-serif','4px',2,'none',3,2,'t','.4px','normal',HEX,'e-demon'],
+ aot:['هجوم العمالقة','جدار ماريا','#9bb59a','#c4d6c2','#b3c9b1','#5f7a5e','linear-gradient(180deg,rgba(60,100,70,.38),transparent 45%),repeating-linear-gradient(0deg,rgba(255,255,255,.035) 0 3px,transparent 3px 30px),radial-gradient(70% 30% at 50% 100%,rgba(160,40,30,.3),transparent 70%)','Georgia,serif','0',2.4,'none',4,2,'t','.8px','normal',SQ,'e-aot']
+};
+{
+  let c='';
+  for(const k in TH){const t=TH[k];c+=`#vault[data-th=${k}],#viewer[data-th=${k}]{--gold:${t[2]};--accent:${t[2]};--orange:${t[3]};--g1:${t[4]};--g2:${t[5]};--vbg:${t[6]};--font:${t[7]};--r:${t[8]};--sw:${t[9]};--fl:${t[10]};--cols:${t[11]};--fc:${t[12]};--ls:${t[14]};--fs:${t[15]};--fab:${t[16]}}\n`}
+  const A='#vault[data-ani]';
+  c+=`${A}{background:var(--vbg),var(--bg);font-family:var(--font);font-style:var(--fs)}
+${A} .btn,${A} .card,${A} .ftile,${A} .cell,${A} .item,${A} .sbar,${A} .chip,${A} .ib,${A} input,${A} textarea,${A} .sh button{border-radius:var(--r)}
+${A} .ic{stroke-width:var(--sw);fill:var(--fl)}
+${A} #grid{grid-template-columns:repeat(var(--cols),1fr)}
+${A} #fgrid{grid-template-columns:repeat(var(--fc),1fr)}
+${A} h1,${A} .ftile b,${A} #nav button{letter-spacing:var(--ls)}
+${A} #addFile{clip-path:var(--fab)}
+${A} .wm{display:none}
+${A} header{border-bottom-color:var(--gold)}
+#vault[data-nav=t] #nav{order:-1;border-top:0;border-bottom:1px solid rgba(255,255,255,.14)}`;
+  const st=document.createElement('style');st.textContent=c;document.head.appendChild(st);
+}
+const applyTh=()=>{
+  const k=localStorage.th||'',a=TH[k];
+  document.querySelectorAll('#vault,#viewer').forEach(e=>{
+    e.dataset.th=k;
+    if(a)e.dataset.ani='1';else delete e.dataset.ani;
+    if(a&&a[13]==='t')e.dataset.nav='t';else delete e.dataset.nav;
+  });
+  $('#vault h1').textContent=a?a[1]:'الخزنة';
+  $('.brand use').setAttribute('href','#'+(a?a[17]:'i-spiral'));
+};
 [['','ذهبي'],['crimson','قرمزي'],['green','أخضر'],['violet','بنفسجي'],['blue','أزرق'],['rose','وردي']].forEach(([v,t])=>{
   const b=document.createElement('button');b.className='btn g';b.textContent=t;
   b.onclick=()=>{localStorage.th=v;applyTh()};$('#throw').appendChild(b);
+});
+Object.keys(TH).forEach(k=>{
+  const b=document.createElement('button');b.className='btn';b.textContent=TH[k][0];
+  b.onclick=()=>{localStorage.th=k;applyTh()};$('#throw').appendChild(b);
 });
 applyTh();
 async function editFolder(){
@@ -646,7 +707,7 @@ async function getThumb(it){
 }
 function renderGrid(){
   const inF=typeof cur==='number',fo=inF&&folders.find(f=>f.id===cur),tn=photos.length-live().length;
-  view=cur==='trash'?photos.filter(p=>p.tr):cur==='fav'?live().filter(p=>p.fv):live().filter(p=>inF?p.f===cur:(q||!p.f));
+  view=cur==='trash'?photos.filter(p=>p.tr):cur==='fav'?live().filter(p=>p.fv):live().filter(p=>inF?p.f===cur:!!q);
   if(q)view=view.filter(p=>(p.name||'').toLowerCase().includes(q));
   if(flt!=='all')view=view.filter(p=>p.type===flt);
   if(asc)view=[...view].reverse();
@@ -673,6 +734,9 @@ function renderGrid(){
   const g=$('#grid');g.innerHTML='';g.className=selMode?'selmode':'';$('#pp').classList.toggle('selecting',selMode);
   $('#addFile').style.display=cur==='trash'?'none':'';
   $('#pcount').textContent=view.length?view.length+' عنصر':'';
+  const rootOnly=cur==null&&!q;
+  $('#pp .tb').style.display=rootOnly?'none':'';$('#chips').style.display=rootOnly?'none':'';
+  if(rootOnly){g.innerHTML=folders.length?'':'<div id="empty">مفيش مجلدات لسه.<br>دوس "مجلد جديد" أو + للبدء</div>';updateBar();return}
   if(!view.length){
     const m=q?'مفيش نتايج للبحث':cur==='trash'?'السلة فاضية':inF?'المجلد فاضي.<br>دوس + لإضافة ملفات هنا':(folders.length||tn)?'مفيش ملفات برّه المجلدات':'المعرض فاضي.<br>دوس على + لإضافة صور أو فيديوهات';
     g.innerHTML='<div id="empty">'+m+'</div>';updateBar();return;
@@ -721,7 +785,13 @@ async function makeThumb(buf,mime){
 }
 $('#addFile').onclick=async()=>{
   const i=await pick('إضافة',['من المعرض (صور وفيديو)','تصوير صورة','تصوير فيديو','ملف (PDF أو مستند أو صوت)']);
-  if(i<0)return;picking=true;$(['#file','#cam1','#cam2','#docf'][i]).click();
+  if(i<0)return;
+  if(typeof cur==='number')tgt=cur;
+  else{
+    const j=await pick('في أنهي مجلد؟',[...folders.map(f=>f.n),'+ مجلد جديد']);if(j<0)return;
+    tgt=j<folders.length?folders[j].id:await newFolder(true);if(!tgt)return;
+  }
+  picking=true;$(['#file','#cam1','#cam2','#docf'][i]).click();
 };
 async function openDoc(it){
   picking=true;
@@ -767,7 +837,7 @@ const fh=async e=>{
   const fs=[...e.target.files];e.target.value='';
   if(!fs.length){picking=false;return}
   if(decoy){picking=false;return load()}
-  let n=0,skipped='',full=false;const fcur=typeof cur==='number'?cur:null;
+  let n=0,skipped='',full=false;const fcur=tgt;
   for(let k=0;k<fs.length;k++){
     const f=fs[k],isV=(f.type||'').startsWith('video/'),isD=!isV&&!(f.type||'').startsWith('image/'),tag=(k+1)+' من '+fs.length;
     if(isD&&f.size>1e8){skipped='ملف أكبر من 100 ميجا اتخطّى';continue}
@@ -827,10 +897,9 @@ $('#bFav').onclick=async()=>{
 $('#bUndo').onclick=async()=>{const ids=[...sel];if(!ids.length)return;await patch(ids,r=>{delete r.tr});selMode=false;sel.clear();load()};
 $('#bMove').onclick=async()=>{
   const ids=[...sel];if(!ids.length)return;
-  const i=await pick('نقل إلى',[...folders.map(f=>f.n),'بدون مجلد (المعرض الرئيسي)','+ مجلد جديد']);if(i<0)return;
-  let fid=i<folders.length?folders[i].id:null;
-  if(i>folders.length){fid=await newFolder(true);if(!fid)return}
-  await patch(ids,r=>{if(fid==null)delete r.f;else r.f=fid});selMode=false;sel.clear();load();
+  const i=await pick('نقل إلى',[...folders.map(f=>f.n),'+ مجلد جديد']);if(i<0)return;
+  const fid=i<folders.length?folders[i].id:await newFolder(true);if(!fid)return;
+  await patch(ids,r=>{r.f=fid});selMode=false;sel.clear();load();
 };
 
 /* ----- full-screen viewer ----- */
@@ -850,7 +919,7 @@ async function showV(){
   }catch(e){}
 }
 function openViewer(i){vi=i;$('#viewer').style.display='flex';showV()}
-let ss=null;const stopSS=()=>{clearInterval(ss);ss=null;$('#vplay').textContent='▶ عرض'};
+let ss=null;const stopSS=()=>{clearInterval(ss);ss=null;$('#vplay').textContent='▶'};
 function closeViewer(){
   stopSS();vtok++;$('#viewer').style.display='none';
   const vid=$('#vvid');vid.pause();vid.removeAttribute('src');vid.load();
@@ -864,7 +933,7 @@ $('#vname').onclick=async()=>{
   const e=await seal(key,enc.encode(n));await patch([it.id],r=>{r.nm={iv:e.iv,c:e.c}});it.name=n;
 };
 $('#vfav').onclick=async()=>{const it=view[vi];if(!it)return;await patch([it.id],r=>{if(r.fv)delete r.fv;else r.fv=1});it.fv=it.fv?0:1;$('#vfav').textContent=it.fv?'★':'☆'};
-$('#vplay').onclick=()=>{if(ss)return stopSS();$('#vplay').textContent='⏸ إيقاف';ss=setInterval(()=>{if(!$('#vvid').paused)return;stepV(1)},3500)};$('#vprev').onclick=()=>stepV(-1);$('#vnext').onclick=()=>stepV(1);
+$('#vplay').onclick=()=>{if(ss)return stopSS();$('#vplay').textContent='⏸';ss=setInterval(()=>{if(!$('#vvid').paused)return;stepV(1)},3500)};$('#vprev').onclick=()=>stepV(-1);$('#vnext').onclick=()=>stepV(1);
 $('#vrestore').onclick=async()=>{const it=view[vi];if(!it)return;await restore([it]);$('#vcount').textContent='تم الحفظ في التنزيلات ✅'};
 $('#vdel').onclick=async()=>{
   const it=view[vi];if(!it)return;
@@ -1001,7 +1070,7 @@ let lastSh=0;
 window.addEventListener('devicemotion',e=>{
   if(localStorage.sk!=='1'||$('#vault').style.display!=='flex')return;
   const a=e.accelerationIncludingGravity;if(!a)return;
-  if(Math.hypot(a.x||0,a.y||0,a.z||0)>28){const t=Date.now();if(t-lastSh>120&&t-lastSh<700)lock();lastSh=t}
+  if(Math.abs(Math.hypot(a.x||0,a.y||0,a.z||0)-9.8)>7){const t=Date.now();if(t-lastSh>100&&t-lastSh<900)lock();lastSh=t}
 });
 
 /* ----- backup: one encrypted file with everything ----- */
