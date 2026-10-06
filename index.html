@@ -72,13 +72,17 @@ details{background:var(--card);border-radius:12px;padding:10px 12px;margin-botto
 
 <div id="vault">
   <header><h1>الخزنة</h1><button class="btn g" id="lock">قفل 🔒</button></header>
-  <details><summary>🆘 سؤال الطوارئ</summary>
+  <details><summary>🆘 الطوارئ والأمان</summary>
     <input id="qt" placeholder="السؤال (مثال: اسم أول مدرسة؟)">
     <input id="qa" placeholder="الإجابة (الأفضل تكون طويلة)">
     <button class="btn" id="qsave">حفظ السؤال</button>
+    <hr>
+    <summary>🔑 تغيير الرقم السري</summary>
+    <input id="np1" type="password" inputmode="numeric" placeholder="الرقم الجديد (8 أرقام أو أكتر أفضل)">
+    <button class="btn" id="pchg">تغيير الرقم السري</button>
     <div id="st"></div>
   </details>
-  <div class="tabs"><button id="tp" class="on">الصور</button><button id="tn">الملاحظات</button></div>
+  <div class="tabs"><button id="tp" class="on">الصور</button><button id="tn">الملاحظات</button><button id="ti">المتطفلين</button></div>
 
   <div id="pp">
     <div class="tb"><small id="pcount"></small><div><button class="btn g" id="selBtn">تحديد</button> <button class="btn" id="addFile">+ إضافة صور</button></div></div>
@@ -97,6 +101,13 @@ details{background:var(--card);border-radius:12px;padding:10px 12px;margin-botto
     <textarea id="note" placeholder="اكتب ملاحظة سرية..."></textarea>
     <div class="row"><button class="btn" id="saveNote">حفظ الملاحظة</button></div>
     <div id="nlist"></div>
+  </div>
+
+  <div id="ip" style="display:none">
+    <p id="istat"></p>
+    <div class="row"><button class="btn" id="intrOn">تفعيل</button><button class="btn g" id="intrOff">إيقاف</button></div>
+    <p style="font-size:14px;opacity:.7">لو حد كتب الرقم السري غلط 3 مرات، التطبيق بيصوّره بالكاميرا الأمامية ويحفظ الصورة مشفّرة هنا.</p>
+    <div id="ilist"></div>
   </div>
 </div>
 
@@ -117,12 +128,31 @@ const dbp=new Promise((res,rej)=>{const r=indexedDB.open('v',1);r.onupgradeneede
 async function tx(mode,fn){const d=await dbp;return new Promise((res,rej)=>{const t=d.transaction('i',mode);const q=fn(t.objectStore('i'));t.oncomplete=()=>res(q&&q.result);t.onerror=()=>rej(t.error)})}
 
 /* ---------- crypto: random master key, wrapped by PIN and by emergency answer ---------- */
-async function derive(txt,salt){const k=await crypto.subtle.importKey('raw',enc.encode(txt),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:200000,hash:'SHA-256'},k,{name:'AES-GCM',length:256},false,['encrypt','decrypt'])}
+const IT=600000;
+async function derive(txt,salt,it){const k=await crypto.subtle.importKey('raw',enc.encode(txt),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:it||200000,hash:'SHA-256'},k,{name:'AES-GCM',length:256},false,['encrypt','decrypt'])}
 async function seal(key,buf){const iv=crypto.getRandomValues(new Uint8Array(12));const c=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,buf);return{iv,c}}
 const unseal=(key,iv,c)=>crypto.subtle.decrypt({name:'AES-GCM',iv},key,c);
 const norm=t=>t.normalize('NFKC').toLowerCase().replace(/[\u064B-\u0652\u0640]/g,'').replace(/[أإآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/\s+/g,' ').trim();
-async function wrapWith(txt,master){const salt=crypto.getRandomValues(new Uint8Array(16));const wk=await derive(txt,salt);const raw=await crypto.subtle.exportKey('raw',master);const s=await seal(wk,raw);return{s:b64(salt),iv:b64(s.iv),c:b64(s.c)}}
-async function unwrapWith(txt,w){const wk=await derive(txt,ub64(w.s));const raw=await unseal(wk,ub64(w.iv),ub64(w.c));return crypto.subtle.importKey('raw',raw,'AES-GCM',true,['encrypt','decrypt'])}
+async function wrapWith(txt,master){const salt=crypto.getRandomValues(new Uint8Array(16));const wk=await derive(txt,salt,IT);const raw=await crypto.subtle.exportKey('raw',master);const s=await seal(wk,raw);return{s:b64(salt),iv:b64(s.iv),c:b64(s.c),i:IT}}
+async function unwrapWith(txt,w){const wk=await derive(txt,ub64(w.s),w.i);const raw=await unseal(wk,ub64(w.iv),ub64(w.c));return crypto.subtle.importKey('raw',raw,'AES-GCM',true,['encrypt','decrypt'])}
+const THR=k=>{try{return JSON.parse(localStorage[k]||'{"n":0,"t":0}')}catch(e){return{n:0,t:0}}};
+const isLocked=k=>Date.now()<THR(k).t;
+function failed(k){const o=THR(k);o.n++;if(o.n>=3)o.t=Date.now()+Math.min(15000*Math.pow(2,o.n-3),3600000);localStorage[k]=JSON.stringify(o)}
+const okay=k=>localStorage.removeItem(k);
+const ECP={name:'ECDH',namedCurve:'P-256'};
+async function sealIntr(pubJwk,buf){
+  const pub=await crypto.subtle.importKey('jwk',pubJwk,ECP,false,[]);
+  const eph=await crypto.subtle.generateKey(ECP,true,['deriveKey']);
+  const ak=await crypto.subtle.deriveKey({name:'ECDH',public:pub},eph.privateKey,{name:'AES-GCM',length:256},false,['encrypt']);
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const c=await crypto.subtle.encrypt({name:'AES-GCM',iv},ak,buf);
+  return{epk:await crypto.subtle.exportKey('jwk',eph.publicKey),iv,c};
+}
+async function openIntr(priv,it){
+  const epk=await crypto.subtle.importKey('jwk',it.epk,ECP,false,[]);
+  const ak=await crypto.subtle.deriveKey({name:'ECDH',public:epk},priv,{name:'AES-GCM',length:256},false,['decrypt']);
+  return crypto.subtle.decrypt({name:'AES-GCM',iv:it.iv},ak,it.c);
+}
 const getV=()=>JSON.parse(localStorage.vault2||'null');
 const setV=v=>localStorage.vault2=JSON.stringify(v);
 
@@ -133,7 +163,7 @@ const layout=['AC','⌫','%','÷','7','8','9','×','4','5','6','−','1','2','3'
 const keys=$('#keys');
 layout.forEach(l=>{const b=document.createElement('button');b.textContent=l;if('÷×−+='.includes(l))b.className='op';if(l==='0')b.className='z';b.onclick=()=>press(l);keys.appendChild(b)});
 function show(){disp.textContent=expr||'0'}
-function setHint(){hint.textContent=getV()?'':'أول مرة: اكتب رقم سري (6 أرقام أو أكتر) واضغط ='}
+function setHint(){hint.textContent=getV()?'':'أول مرة: اكتب رقم سري (6 أرقام أو أكتر، والأفضل 8) واضغط ='}
 setHint();
 
 async function press(k){
@@ -148,12 +178,15 @@ async function equals(){
     const pin=expr;expr='';show();
     const v=getV();
     if(!v){ // first time: create master key + PIN
+      if(pin.length<6){hint.textContent='الرقم السري لازم 6 أرقام على الأقل';return}
+      if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();
       key=await crypto.subtle.generateKey({name:'AES-GCM',length:256},true,['encrypt','decrypt']);
       setV({p:await wrapWith(pin,key),q:null});
       decoy=false;setHint();return openVault();
     }
-    try{key=await unwrapWith(pin,v.p);decoy=false}
-    catch(e){key=null;decoy=true} // wrong PIN -> empty fake vault
+    if(isLocked('fa')){key=null;decoy=true;return openVault()} // too many wrong tries: fake vault, no check
+    try{key=await unwrapWith(pin,v.p);decoy=false;okay('fa');if(v.p.i!==IT){v.p=await wrapWith(pin,key);setV(v)}}
+    catch(e){failed('fa');if(THR('fa').n>=3)snap();key=null;decoy=true} // wrong PIN -> empty fake vault
     return openVault();
   }
   try{
@@ -179,25 +212,29 @@ $('#rgo').onclick=async()=>{
   const v=getV(),st=$('#rst'),np=$('#rp').value.trim();
   if(!v||!v.q){st.textContent='مفيش سؤال طوارئ متسجل.';return}
   if(!/^\d{6,}$/.test(np)){st.textContent='الرقم الجديد لازم 6 أرقام أو أكتر.';return}
+  if(isLocked('fr')){st.textContent='محاولات كتير. جرّب بعد شوية.';return}
   st.textContent='جاري التحقق...';
   try{
     const m=await unwrapWith(norm($('#ra').value),v.q);
-    v.p=await wrapWith(np,m);setV(v);
+    v.p=await wrapWith(np,m);setV(v);okay('fr');okay('fa');
     st.textContent='';$('#rec').style.display='none';
     key=m;decoy=false;openVault();
-  }catch(e){st.textContent='الإجابة غلط.'}
+  }catch(e){failed('fr');st.textContent='الإجابة غلط.'}
 };
 
 /* ---------- vault ---------- */
 let photos=[],notes=[],selMode=false,sel=new Set(),vi=-1,picking=false,vurl=null,vtok=0;
 const thumbURL=new Map();
+let idle=null;
+const bump=()=>{clearTimeout(idle);if($('#vault').style.display==='block')idle=setTimeout(()=>{if(!picking)lock()},90000)};
+['touchstart','click','keydown','scroll'].forEach(e=>document.addEventListener(e,bump,{passive:true,capture:true}));
 const delIds=ids=>tx('readwrite',s=>{ids.forEach(i=>s.delete(i))});
 
-function openVault(){$('#calc').style.display='none';$('#rec').style.display='none';$('#vault').style.display='block';tabTo('p');load()}
+function openVault(){$('#calc').style.display='none';$('#rec').style.display='none';$('#vault').style.display='block';tabTo('p');load();bump()}
 function lock(){
-  key=null;decoy=false;expr='';show();$('#st').textContent='';
+  key=null;decoy=false;expr='';show();$('#st').textContent='';clearTimeout(idle);$('#rec').style.display='none';
   closeViewer();urls.forEach(URL.revokeObjectURL);urls=[];thumbURL.clear();photos=[];notes=[];sel.clear();selMode=false;
-  $('#grid').innerHTML='';$('#nlist').innerHTML='';$('#note').value='';
+  privKey=null;$('#grid').innerHTML='';$('#nlist').innerHTML='';$('#ilist').innerHTML='';$('#note').value='';
   $('#vault').style.display='none';$('#calc').style.display='flex';
 }
 $('#lock').onclick=lock;
@@ -206,17 +243,23 @@ window.addEventListener('focus',()=>setTimeout(()=>{picking=false},1500));
 
 $('#qsave').onclick=async()=>{
   const t=$('#qt').value.trim(),an=norm($('#qa').value),st=$('#st');
-  if(!t||an.length<3){st.textContent='اكتب سؤال وإجابة (3 حروف على الأقل).';return}
+  if(!t||an.length<8){st.textContent='اكتب سؤال وإجابة من 8 حروف على الأقل.';return}
   if(!decoy){const v=getV();v.q={t,...await wrapWith(an,key)};setV(v)}
   $('#qt').value='';$('#qa').value='';st.textContent='تم حفظ سؤال الطوارئ ✅';
 };
 
+$('#pchg').onclick=async()=>{
+  const p=$('#np1').value.trim(),st=$('#st');
+  if(!/^\d{6,}$/.test(p)){st.textContent='الرقم لازم 6 أرقام أو أكتر (والأفضل 8).';return}
+  if(!decoy){const v=getV();v.p=await wrapWith(p,key);setV(v)}
+  $('#np1').value='';st.textContent='تم تغيير الرقم السري ✅';
+};
 function tabTo(t){
-  $('#pp').style.display=t==='p'?'block':'none';$('#np').style.display=t==='n'?'block':'none';
-  $('#tp').classList.toggle('on',t==='p');$('#tn').classList.toggle('on',t==='n');
-  if(t==='n'&&selMode){selMode=false;sel.clear();renderGrid()}
+  ['p','n','i'].forEach(x=>{$('#'+x+'p').style.display=x===t?'block':'none';$('#t'+x).classList.toggle('on',x===t)});
+  if(t!=='p'&&selMode){selMode=false;sel.clear();renderGrid()}
+  if(t==='i')loadIntr();
 }
-$('#tp').onclick=()=>tabTo('p');$('#tn').onclick=()=>tabTo('n');
+$('#tp').onclick=()=>tabTo('p');$('#tn').onclick=()=>tabTo('n');$('#ti').onclick=()=>tabTo('i');
 
 async function load(){
   const all=decoy?[]:((await tx('readonly',s=>s.getAll()))||[]).sort((a,b)=>b.id-a.id);
@@ -267,9 +310,9 @@ async function makeThumb(buf,mime){
 }
 $('#addFile').onclick=()=>{picking=true;$('#file').click()};
 $('#file').onchange=async e=>{
-  const fs=[...e.target.files];e.target.value='';picking=false;
-  if(!fs.length)return;
-  if(decoy){return load()} // fake vault saves nothing
+  const fs=[...e.target.files];e.target.value='';
+  if(!fs.length){picking=false;return}
+  if(decoy){picking=false;return load()} // fake vault saves nothing
   let n=0;
   for(const f of fs){
     $('#pst').textContent='جاري التشفير... '+n+' من '+fs.length;
@@ -282,7 +325,7 @@ $('#file').onchange=async e=>{
   }
   $('#pst').textContent=n?'تمت إضافة '+n+' ✅':'حصلت مشكلة في الإضافة';
   setTimeout(()=>{$('#pst').textContent=''},2500);
-  load();
+  picking=false;load();
 };
 
 /* ----- restore (save decrypted copies to the phone's Downloads) ----- */
@@ -336,6 +379,75 @@ $('#vdel').onclick=async()=>{
 let sx=null;const vv=$('#viewer');
 vv.addEventListener('touchstart',e=>{sx=e.touches[0].clientX},{passive:true});
 vv.addEventListener('touchend',e=>{if(sx===null)return;const dx=e.changedTouches[0].clientX-sx;sx=null;if(Math.abs(dx)>60)stepV(dx<0?1:-1)});
+
+/* ----- intruder photo ----- */
+let privKey=null;
+async function snap(){
+  const v=getV();if(!v||!v.intr||!v.pub)return;
+  let st;
+  try{
+    st=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640}}});
+    const vd=document.createElement('video');vd.muted=true;vd.setAttribute('playsinline','');
+    vd.style.cssText='position:fixed;left:-9999px;top:0;width:160px;height:120px';
+    document.body.appendChild(vd);vd.srcObject=st;await vd.play();
+    await new Promise(r=>setTimeout(r,900));
+    const w=vd.videoWidth,h=vd.videoHeight;
+    if(w){
+      const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(vd,0,0,w,h);
+      const b=await new Promise(r=>c.toBlob(r,'image/jpeg',0.7));
+      const e=await sealIntr(v.pub,await b.arrayBuffer());
+      await tx('readwrite',x=>x.put({id:Date.now(),type:'intr',...e}));
+    }
+    vd.remove();
+  }catch(e){}finally{if(st)st.getTracks().forEach(t=>t.stop())}
+}
+async function getPriv(){
+  if(privKey)return privKey;
+  const v=getV(),raw=await unseal(key,ub64(v.k.iv),ub64(v.k.c));
+  privKey=await crypto.subtle.importKey('pkcs8',raw,ECP,false,['deriveKey']);return privKey;
+}
+async function loadIntr(){
+  const v=getV(),l=$('#ilist');l.innerHTML='';
+  const on=!decoy&&v&&v.intr;
+  $('#istat').textContent=on?'صورة المتطفل: مفعّلة ✅':'صورة المتطفل: مش مفعّلة';
+  $('#intrOn').style.display=on?'none':'';$('#intrOff').style.display=on?'':'none';
+  if(decoy||!v||!v.k)return;
+  const all=((await tx('readonly',x=>x.getAll()))||[]).filter(i=>i.type==='intr').sort((a,b)=>b.id-a.id);
+  if(!all.length){l.innerHTML='<div id="empty">مفيش صور متطفلين</div>';return}
+  let priv;try{priv=await getPriv()}catch(e){return}
+  for(const it of all){
+    try{
+      const buf=await openIntr(priv,it);
+      const u=URL.createObjectURL(new Blob([buf],{type:'image/jpeg'}));urls.push(u);
+      const d=document.createElement('div');d.className='item';
+      const im=new Image();im.src=u;d.appendChild(im);
+      d.appendChild(document.createTextNode(new Date(it.id).toLocaleString('ar-EG')));
+      d.appendChild(document.createElement('br'));
+      const del=document.createElement('button');del.className='btn g';del.textContent='حذف';
+      del.onclick=async()=>{if(confirm('تمسح الصورة دي؟')){await delIds([it.id]);loadIntr()}};
+      d.appendChild(del);l.appendChild(d);
+    }catch(e){}
+  }
+}
+$('#intrOn').onclick=async()=>{
+  const st=$('#istat');
+  if(decoy){st.textContent='صورة المتطفل: مفعّلة ✅';return}
+  picking=true;
+  try{
+    try{const m=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'}});m.getTracks().forEach(t=>t.stop())}
+    catch(e){st.textContent='الكاميرا مش متاحة. اسمح للتطبيق باستخدام الكاميرا وجرّب تاني.';return}
+    const v=getV();
+    if(!v.pub){
+      const kp=await crypto.subtle.generateKey(ECP,true,['deriveKey']);
+      v.pub=await crypto.subtle.exportKey('jwk',kp.publicKey);
+      const s=await seal(key,await crypto.subtle.exportKey('pkcs8',kp.privateKey));
+      v.k={iv:b64(s.iv),c:b64(s.c)};
+    }
+    v.intr=1;setV(v);
+  }finally{setTimeout(()=>{picking=false},1500)}
+  loadIntr();
+};
+$('#intrOff').onclick=()=>{const v=getV();v.intr=0;setV(v);loadIntr()};
 
 /* ----- notes ----- */
 function renderNotes(){
