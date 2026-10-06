@@ -83,6 +83,7 @@ details{background:var(--card);border-radius:12px;padding:10px 12px;margin-botto
 .card p{margin:0 0 10px;font-size:13px;color:var(--mut);line-height:1.6}
 #st{font-size:14px;color:var(--gold);min-height:20px}
 #bst{font-size:14px;color:var(--gold);min-height:20px;margin-top:8px}
+#isl{font-size:13px;color:var(--mut);margin:10px 0 8px;line-height:1.8}
 #binfo{font-size:13px;color:var(--mut);line-height:1.9;margin-bottom:10px;white-space:pre-line}
 #vault .tb small{color:var(--mut)}
 #grid{gap:6px}
@@ -178,7 +179,8 @@ details{background:var(--card);border-radius:12px;padding:10px 12px;margin-botto
         <h3><svg class="ic"><use href="#i-eye"/></svg>صورة المتطفل</h3>
         <p>لو حد كتب الرقم السري غلط 3 مرات، التطبيق بيصوّره بالكاميرا الأمامية ويحفظ الصورة مشفّرة هنا.</p>
         <span id="istat"></span>
-        <div class="row" style="margin-bottom:0"><button class="btn" id="intrOn">تفعيل</button><button class="btn g" id="intrOff">إيقاف</button></div>
+        <div class="row" style="margin-bottom:0"><button class="btn" id="intrOn">تفعيل</button><button class="btn g" id="intrOff">إيقاف</button><button class="btn g" id="intrTest">جرّب الكاميرا</button></div>
+        <div id="isl"></div>
       </div>
       <div id="ilist"></div>
     </div>
@@ -556,35 +558,48 @@ vv.addEventListener('touchend',e=>{if(sx===null)return;const dx=e.changedTouches
 
 /* ----- intruder photo ----- */
 let privKey=null;
+const setSL=r=>{try{localStorage.sl=JSON.stringify({t:Date.now(),r})}catch(e){}};
 async function snap(){
-  const v=getV();if(!v||!v.intr||!v.pub)return;
-  let st;
+  const v=getV();
+  if(!v||!v.intr||!v.pub){setSL('off');return 'off'}
+  let st,vd,r='ok';
   try{
     st=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640}}});
-    const vd=document.createElement('video');vd.muted=true;vd.setAttribute('playsinline','');
-    vd.style.cssText='position:fixed;left:-9999px;top:0;width:160px;height:120px';
+    vd=document.createElement('video');vd.muted=true;vd.setAttribute('playsinline','');
+    vd.style.cssText='position:fixed;left:0;top:0;width:160px;height:120px;opacity:0;pointer-events:none;z-index:-1';
     document.body.appendChild(vd);vd.srcObject=st;await vd.play();
-    await new Promise(r=>setTimeout(r,900));
+    for(let i=0;i<30&&!(vd.videoWidth>0&&vd.readyState>=2);i++)await new Promise(x=>setTimeout(x,100));
+    await new Promise(x=>setTimeout(x,700));
     const w=vd.videoWidth,h=vd.videoHeight;
     if(w){
       const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(vd,0,0,w,h);
-      const b=await new Promise(r=>c.toBlob(r,'image/jpeg',0.7));
+      const b=await new Promise(x=>c.toBlob(x,'image/jpeg',0.7));
       const e=await sealIntr(v.pub,await b.arrayBuffer());
       await tx('readwrite',x=>x.put({id:Date.now(),type:'intr',...e}));
-    }
-    vd.remove();
-  }catch(e){}finally{if(st)st.getTracks().forEach(t=>t.stop())}
+    }else r='noframe';
+  }catch(e){r='err:'+((e&&e.name)||'x')}
+  finally{if(vd)vd.remove();if(st)st.getTracks().forEach(t=>t.stop());setSL(r)}
+  return r;
 }
 async function getPriv(){
   if(privKey)return privKey;
   const v=getV(),raw=await unseal(key,ub64(v.k.iv),ub64(v.k.c));
   privKey=await crypto.subtle.importKey('pkcs8',raw,ECP,false,['deriveKey']);return privKey;
 }
+function showSL(on){
+  const el=$('#isl');if(!on){el.textContent='';return}
+  let o=null;try{o=JSON.parse(localStorage.sl||'null')}catch(e){}
+  if(!o){el.textContent='آخر محاولة تصوير: لسه محصلتش.';return}
+  const M={ok:'نجح التصوير ✅','err:NotAllowedError':'الكاميرا ممنوعة: افتح إعدادات الموقع في كروم واسمح بالكاميرا.','err:NotReadableError':'الكاميرا مشغولة بتطبيق تاني.','err:NotFoundError':'مش لاقي كاميرا أمامية.',noframe:'الكاميرا فتحت بس مجاتش صورة.',off:'التصوير مش مفعّل.'};
+  el.textContent='آخر محاولة تصوير ('+new Date(o.t).toLocaleString('ar-EG')+'): '+(M[o.r]||('فشل ('+o.r+')'));
+}
 async function loadIntr(){
   const v=getV(),l=$('#ilist');l.innerHTML='';
   const on=!decoy&&v&&v.intr;
   $('#istat').textContent=on?'مفعّلة ✅':'مش مفعّلة';$('#istat').classList.toggle('off',!on);
   $('#intrOn').style.display=on?'none':'';$('#intrOff').style.display=on?'':'none';
+  $('#intrTest').style.display=on?'':'none';
+  showSL(on);
   if(decoy||!v||!v.k)return;
   const all=((await tx('readonly',x=>x.getAll()))||[]).filter(i=>i.type==='intr').sort((a,b)=>b.id-a.id);
   if(!all.length){l.innerHTML='<div id="empty">مفيش صور متطفلين</div>';return}
@@ -619,6 +634,13 @@ $('#intrOn').onclick=async()=>{
     }
     v.intr=1;setV(v);
   }finally{setTimeout(()=>{picking=false},1500)}
+  loadIntr();
+};
+$('#intrTest').onclick=async()=>{
+  if(decoy)return;
+  const el=$('#isl');el.textContent='جاري التجربة... اسمح بالكاميرا لو طلب كروم.';
+  picking=true;
+  try{await snap()}finally{setTimeout(()=>{picking=false},1500)}
   loadIntr();
 };
 $('#intrOff').onclick=()=>{const v=getV();v.intr=0;setV(v);loadIntr()};
