@@ -33,6 +33,24 @@ textarea{width:100%;min-height:80px;border-radius:10px;border:1px solid var(--ke
 .item button{margin-top:8px;font-size:14px;padding:6px 12px}
 details{background:var(--card);border-radius:12px;padding:10px 12px;margin-bottom:14px}summary{font-size:16px}details input{width:100%;margin:8px 0;padding:10px;border-radius:10px;border:1px solid var(--key);background:var(--bg);color:var(--fg);font-size:16px;font-family:inherit}#st,#rst{font-size:14px;margin-top:6px}
 #rec{display:none;height:100%;overflow-y:auto;padding:20px;max-width:480px;margin:0 auto;direction:rtl}#rec input{width:100%;margin:8px 0;padding:12px;border-radius:10px;border:1px solid var(--key);background:var(--card);color:var(--fg);font-size:16px;font-family:inherit}#rq{font-size:18px;margin:10px 0;padding:12px;background:var(--card);border-radius:10px}
+.tabs{display:flex;gap:6px;margin-bottom:12px}.tabs button{flex:1;padding:10px;border:0;border-radius:10px;background:var(--card);color:var(--fg);font-size:16px}.tabs button.on{background:var(--accent);color:#fff}
+.tb{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px}.tb small{opacity:.65}
+#grid{display:grid;grid-template-columns:repeat(3,1fr);gap:3px}
+.cell{position:relative;aspect-ratio:1;background:var(--card);overflow:hidden;border-radius:4px}
+.cell img{width:100%;height:100%;object-fit:cover;display:block}
+.ck{position:absolute;top:6px;right:6px;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,.35);border:2px solid #fff;color:transparent;font-size:14px;display:none;align-items:center;justify-content:center}
+.selmode .ck{display:flex}.cell.sel .ck{background:var(--accent);color:#fff}.cell.sel img{opacity:.55}
+#grid #empty{grid-column:1/-1}
+#bar{display:none;position:sticky;bottom:0;gap:8px;align-items:center;background:var(--card);padding:10px;border-radius:12px;margin-top:10px;flex-wrap:wrap;border:1px solid var(--key)}
+#bar .btn{padding:8px 12px;font-size:15px}
+#pst{font-size:14px;opacity:.8;margin:4px 0}
+#viewer{display:none;position:fixed;inset:0;background:#000;color:#fff;flex-direction:column;z-index:50;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);direction:rtl}
+#vtop,#vbot{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 14px}
+#vmid{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative}
+#vimg{max-width:100%;max-height:100%;object-fit:contain}
+.nav{position:absolute;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.18);color:#fff;border:0;border-radius:50%;width:44px;height:44px;font-size:22px}
+#vprev{left:8px}#vnext{right:8px}
+#viewer .btn.g{background:rgba(255,255,255,.2);color:#fff}
 #empty{opacity:.6;text-align:center;padding:30px}
 </style>
 </head>
@@ -60,13 +78,32 @@ details{background:var(--card);border-radius:12px;padding:10px 12px;margin-botto
     <button class="btn" id="qsave">حفظ السؤال</button>
     <div id="st"></div>
   </details>
-  <textarea id="note" placeholder="اكتب ملاحظة سرية..."></textarea>
-  <div class="row">
-    <button class="btn" id="saveNote">حفظ الملاحظة</button>
-    <button class="btn g" id="addFile">إضافة صورة</button>
-    <input type="file" id="file" accept="image/*" hidden>
+  <div class="tabs"><button id="tp" class="on">الصور</button><button id="tn">الملاحظات</button></div>
+
+  <div id="pp">
+    <div class="tb"><small id="pcount"></small><div><button class="btn g" id="selBtn">تحديد</button> <button class="btn" id="addFile">+ إضافة صور</button></div></div>
+    <input type="file" id="file" accept="image/*" multiple hidden>
+    <div id="pst"></div>
+    <div id="grid"></div>
+    <div id="bar">
+      <b id="bcount">0 محددة</b>
+      <button class="btn g" id="selAll">الكل</button>
+      <button class="btn" id="bRestore">استرجاع للموبايل</button>
+      <button class="btn g" id="bDel">حذف</button>
+    </div>
   </div>
-  <div id="list"></div>
+
+  <div id="np" style="display:none">
+    <textarea id="note" placeholder="اكتب ملاحظة سرية..."></textarea>
+    <div class="row"><button class="btn" id="saveNote">حفظ الملاحظة</button></div>
+    <div id="nlist"></div>
+  </div>
+</div>
+
+<div id="viewer">
+  <div id="vtop"><button class="btn g" id="vclose">✕ إغلاق</button><span id="vcount"></span></div>
+  <div id="vmid"><img id="vimg" alt=""><button class="nav" id="vprev">‹</button><button class="nav" id="vnext">›</button></div>
+  <div id="vbot"><button class="btn" id="vrestore">⬇ استرجاع للموبايل</button><button class="btn g" id="vdel">🗑 حذف</button></div>
 </div>
 
 <script>
@@ -152,47 +189,171 @@ $('#rgo').onclick=async()=>{
 };
 
 /* ---------- vault ---------- */
-function openVault(){$('#calc').style.display='none';$('#vault').style.display='block';render()}
+let photos=[],notes=[],selMode=false,sel=new Set(),vi=-1,picking=false,vurl=null,vtok=0;
+const thumbURL=new Map();
+const delIds=ids=>tx('readwrite',s=>{ids.forEach(i=>s.delete(i))});
+
+function openVault(){$('#calc').style.display='none';$('#rec').style.display='none';$('#vault').style.display='block';tabTo('p');load()}
 function lock(){
   key=null;decoy=false;expr='';show();$('#st').textContent='';
-  urls.forEach(URL.revokeObjectURL);urls=[];
-  $('#list').innerHTML='';$('#note').value='';
+  closeViewer();urls.forEach(URL.revokeObjectURL);urls=[];thumbURL.clear();photos=[];notes=[];sel.clear();selMode=false;
+  $('#grid').innerHTML='';$('#nlist').innerHTML='';$('#note').value='';
   $('#vault').style.display='none';$('#calc').style.display='flex';
 }
 $('#lock').onclick=lock;
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&!picking)lock()});
+window.addEventListener('focus',()=>setTimeout(()=>{picking=false},1500));
+
 $('#qsave').onclick=async()=>{
   const t=$('#qt').value.trim(),an=norm($('#qa').value),st=$('#st');
   if(!t||an.length<3){st.textContent='اكتب سؤال وإجابة (3 حروف على الأقل).';return}
   if(!decoy){const v=getV();v.q={t,...await wrapWith(an,key)};setV(v)}
   $('#qt').value='';$('#qa').value='';st.textContent='تم حفظ سؤال الطوارئ ✅';
 };
-document.addEventListener('visibilitychange',()=>{if(document.hidden)lock()});
 
-async function render(){
-  const list=$('#list');list.innerHTML='';urls.forEach(URL.revokeObjectURL);urls=[];
-  const items=decoy?[]:((await tx('readonly',s=>s.getAll()))||[]).sort((a,b)=>b.id-a.id);
-  if(!items.length){list.innerHTML='<div id="empty">الخزنة فاضية</div>';return}
-  for(const it of items){
-    const d=document.createElement('div');d.className='item';
+function tabTo(t){
+  $('#pp').style.display=t==='p'?'block':'none';$('#np').style.display=t==='n'?'block':'none';
+  $('#tp').classList.toggle('on',t==='p');$('#tn').classList.toggle('on',t==='n');
+  if(t==='n'&&selMode){selMode=false;sel.clear();renderGrid()}
+}
+$('#tp').onclick=()=>tabTo('p');$('#tn').onclick=()=>tabTo('n');
+
+async function load(){
+  const all=decoy?[]:((await tx('readonly',s=>s.getAll()))||[]).sort((a,b)=>b.id-a.id);
+  photos=all.filter(i=>i.type==='img');notes=[];
+  for(const it of all.filter(i=>i.type==='note')){try{notes.push({id:it.id,text:dec.decode(await unseal(key,it.iv,it.c))})}catch(e){}}
+  renderGrid();renderNotes();
+}
+
+/* ----- photos grid ----- */
+async function getThumb(it){
+  if(thumbURL.has(it.id))return thumbURL.get(it.id);
+  const blob=it.t?new Blob([await unseal(key,it.t.iv,it.t.c)],{type:'image/jpeg'}):new Blob([await unseal(key,it.iv,it.c)],{type:it.mime});
+  const u=URL.createObjectURL(blob);urls.push(u);thumbURL.set(it.id,u);return u;
+}
+function renderGrid(){
+  const g=$('#grid');g.innerHTML='';g.className=selMode?'selmode':'';
+  $('#pcount').textContent=photos.length?photos.length+' صورة':'';
+  if(!photos.length){g.innerHTML='<div id="empty">مفيش صور لسه.<br>دوس "إضافة صور"</div>';updateBar();return}
+  photos.forEach((it,i)=>{
+    const d=document.createElement('div');d.className='cell'+(sel.has(it.id)?' sel':'');
+    const im=new Image();im.alt='';d.appendChild(im);
+    const ck=document.createElement('span');ck.className='ck';ck.textContent='✓';d.appendChild(ck);
+    d.onclick=()=>selMode?toggleSel(it.id,d):openViewer(i);
+    g.appendChild(d);
+    getThumb(it).then(u=>{im.src=u}).catch(()=>{});
+  });
+  updateBar();
+}
+function updateBar(){
+  $('#bar').style.display=selMode?'flex':'none';
+  $('#selBtn').textContent=selMode?'إلغاء التحديد':'تحديد';
+  $('#bcount').textContent=sel.size+' محددة';
+}
+function toggleSel(id,d){sel.has(id)?sel.delete(id):sel.add(id);d.classList.toggle('sel');updateBar()}
+$('#selBtn').onclick=()=>{selMode=!selMode;sel.clear();renderGrid()};
+$('#selAll').onclick=()=>{photos.forEach(p=>sel.add(p.id));renderGrid()};
+
+/* ----- add photos (with small encrypted thumbnails) ----- */
+async function makeThumb(buf,mime){
+  try{
+    const bmp=await createImageBitmap(new Blob([buf],{type:mime}));
+    const sc=Math.min(1,320/Math.max(bmp.width,bmp.height));
+    const c=document.createElement('canvas');c.width=Math.max(1,Math.round(bmp.width*sc));c.height=Math.max(1,Math.round(bmp.height*sc));
+    c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);if(bmp.close)bmp.close();
+    const b=await new Promise(r=>c.toBlob(r,'image/jpeg',0.75));
+    return b?await b.arrayBuffer():null;
+  }catch(e){return null}
+}
+$('#addFile').onclick=()=>{picking=true;$('#file').click()};
+$('#file').onchange=async e=>{
+  const fs=[...e.target.files];e.target.value='';picking=false;
+  if(!fs.length)return;
+  if(decoy){return load()} // fake vault saves nothing
+  let n=0;
+  for(const f of fs){
+    $('#pst').textContent='جاري التشفير... '+n+' من '+fs.length;
     try{
-      const buf=await unseal(key,it.iv,it.c);
-      if(it.type==='note')d.textContent=dec.decode(buf);
-      else{const u=URL.createObjectURL(new Blob([buf],{type:it.mime}));urls.push(u);const im=new Image();im.src=u;d.appendChild(im)}
-    }catch(e){continue}
-    const del=document.createElement('button');del.className='btn g';del.textContent='حذف';
-    del.onclick=async()=>{if(confirm('تحذف العنصر ده؟')){await tx('readwrite',s=>s.delete(it.id));render()}};
-    d.appendChild(del);list.appendChild(d);
+      const buf=await f.arrayBuffer(),s=await seal(key,buf);
+      const tb=await makeThumb(buf,f.type),t=tb?await seal(key,tb):null;
+      await tx('readwrite',st=>st.put({id:Date.now()+n,type:'img',mime:f.type||'image/jpeg',iv:s.iv,c:s.c,t}));
+      n++;
+    }catch(err){}
   }
+  $('#pst').textContent=n?'تمت إضافة '+n+' ✅':'حصلت مشكلة في الإضافة';
+  setTimeout(()=>{$('#pst').textContent=''},2500);
+  load();
+};
+
+/* ----- restore (save decrypted copies to the phone's Downloads) ----- */
+async function restore(list){
+  picking=true;let n=0;
+  try{
+    for(const it of list){
+      const buf=await unseal(key,it.iv,it.c);
+      const ext=({'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif'})[it.mime]||'jpg';
+      const u=URL.createObjectURL(new Blob([buf],{type:it.mime}));
+      const a=document.createElement('a');a.href=u;a.download='IMG_'+it.id+'.'+ext;
+      document.body.appendChild(a);a.click();a.remove();n++;
+      setTimeout(()=>URL.revokeObjectURL(u),60000);
+      await new Promise(r=>setTimeout(r,600));
+    }
+  }finally{setTimeout(()=>{picking=false},2000)}
+  return n;
 }
-async function add(type,buf,mime){
-  if(decoy){return render()} // nothing is really saved in the fake vault
-  const s=await seal(key,buf);
-  await tx('readwrite',st=>st.put({id:Date.now(),type,mime,iv:s.iv,c:s.c}));
-  render();
+$('#bRestore').onclick=async()=>{
+  const list=photos.filter(p=>sel.has(p.id));if(!list.length)return;
+  await restore(list);
+  if(confirm('الصور اتحفظت في تنزيلات الموبايل.\nتمسحها من الخزنة؟'))await delIds(list.map(p=>p.id));
+  selMode=false;sel.clear();load();
+};
+$('#bDel').onclick=async()=>{
+  const ids=[...sel];if(!ids.length)return;
+  if(confirm('تمسح '+ids.length+' صورة نهائيًا؟')){await delIds(ids);selMode=false;sel.clear();load()}
+};
+
+/* ----- full-screen viewer ----- */
+async function showV(){
+  const it=photos[vi];if(!it)return closeViewer();
+  const tk=++vtok;
+  $('#vcount').textContent=(vi+1)+' / '+photos.length;$('#vimg').removeAttribute('src');
+  try{
+    const buf=await unseal(key,it.iv,it.c);if(tk!==vtok)return;
+    if(vurl)URL.revokeObjectURL(vurl);
+    vurl=URL.createObjectURL(new Blob([buf],{type:it.mime}));$('#vimg').src=vurl;
+  }catch(e){}
 }
-$('#saveNote').onclick=async()=>{const t=$('#note').value.trim();if(!t)return;await add('note',enc.encode(t));$('#note').value=''};
-$('#addFile').onclick=()=>$('#file').click();
-$('#file').onchange=async e=>{const f=e.target.files[0];if(!f)return;await add('img',await f.arrayBuffer(),f.type);e.target.value=''};
+function openViewer(i){vi=i;$('#viewer').style.display='flex';showV()}
+function closeViewer(){vtok++;$('#viewer').style.display='none';if(vurl){URL.revokeObjectURL(vurl);vurl=null}$('#vimg').removeAttribute('src');vi=-1}
+function stepV(d){if(photos.length<2)return;vi=(vi+d+photos.length)%photos.length;showV()}
+$('#vclose').onclick=closeViewer;$('#vprev').onclick=()=>stepV(-1);$('#vnext').onclick=()=>stepV(1);
+$('#vrestore').onclick=async()=>{const it=photos[vi];if(!it)return;await restore([it]);$('#vcount').textContent='تم الحفظ في التنزيلات ✅'};
+$('#vdel').onclick=async()=>{
+  const it=photos[vi];if(!it||!confirm('تمسح الصورة دي نهائيًا؟'))return;
+  await delIds([it.id]);await load();
+  if(!photos.length)closeViewer();else{vi=Math.min(vi,photos.length-1);showV()}
+};
+let sx=null;const vv=$('#viewer');
+vv.addEventListener('touchstart',e=>{sx=e.touches[0].clientX},{passive:true});
+vv.addEventListener('touchend',e=>{if(sx===null)return;const dx=e.changedTouches[0].clientX-sx;sx=null;if(Math.abs(dx)>60)stepV(dx<0?1:-1)});
+
+/* ----- notes ----- */
+function renderNotes(){
+  const l=$('#nlist');l.innerHTML='';
+  if(!notes.length){l.innerHTML='<div id="empty">مفيش ملاحظات لسه</div>';return}
+  notes.forEach(n=>{
+    const d=document.createElement('div');d.className='item';d.textContent=n.text;
+    const del=document.createElement('button');del.className='btn g';del.textContent='حذف';
+    del.onclick=async()=>{if(confirm('تحذف الملاحظة دي؟')){await delIds([n.id]);load()}};
+    d.appendChild(document.createElement('br'));d.appendChild(del);l.appendChild(d);
+  });
+}
+$('#saveNote').onclick=async()=>{
+  const t=$('#note').value.trim();if(!t)return;
+  if(!decoy){const s=await seal(key,enc.encode(t));await tx('readwrite',st=>st.put({id:Date.now(),type:'note',iv:s.iv,c:s.c}))}
+  $('#note').value='';load();
+};
+
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
 </body>
